@@ -17,6 +17,7 @@ type FixtureResult =
         roots?: { path: string }[];
         projectId?: string | null;
         preview?: string;
+        updatedAt?: number;
       }[];
       nextCursor: string | null;
     };
@@ -79,6 +80,7 @@ describe("Sidebar source", () => {
                 id: request.params?.archived ? "archived" : "active",
                 preview: "Must not export conversation text",
                 projectId: request.params?.archived ? null : "p1",
+                updatedAt: request.params?.archived ? 10 : 40,
               },
             ],
             nextCursor: null,
@@ -97,8 +99,8 @@ describe("Sidebar source", () => {
         projects: [{ id: "p1" }, { id: "p2" }],
         sectionId: "s",
         threads: [
-          { archived: false, id: "active", projectId: "p1" },
-          { archived: true, id: "archived", projectId: null },
+          { archived: false, id: "active", projectId: "p1", updatedAt: 40 },
+          { archived: true, id: "archived", projectId: null, updatedAt: 10 },
         ],
       });
       expect(JSON.stringify(snapshot)).not.toContain("Must not export");

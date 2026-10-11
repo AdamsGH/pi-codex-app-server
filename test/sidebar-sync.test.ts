@@ -20,13 +20,13 @@ const snapshot = sidebarSnapshotSchema.parse({
   projects: [
     { id: "server-project", name: "Repo", roots: [{ path: "C:\\repo" }] },
   ],
-  schemaVersion: 1,
+  schemaVersion: 2,
   sectionId: "server-section",
   sourceHome: "C:\\pi",
   threads: [
-    { id: "repo-thread", projectId: "server-project" },
-    { id: "home-thread", projectId: null },
-    { archived: true, id: "archived-thread", projectId: null },
+    { id: "repo-thread", projectId: "server-project", updatedAt: 0 },
+    { id: "home-thread", projectId: null, updatedAt: 0 },
+    { archived: true, id: "archived-thread", projectId: null, updatedAt: 0 },
   ],
 });
 const state = () =>
@@ -68,6 +68,42 @@ const state = () =>
   });
 
 describe("Sidebar import", () => {
+  test("sorts imported chats by last activity instead of preserving stale section positions", () => {
+    const original = state();
+    const section =
+      original["electron-persisted-atom-state"]["sidebar-custom-sections-v3"]
+        .account?.sections[0];
+    if (!section) {
+      throw new Error("Fixture has no section");
+    }
+    section.itemKeys = [
+      "codex:thread:local:home-thread",
+      "codex:thread:local:older-chat",
+      "codex:thread:local:newer-chat",
+    ];
+    const source = {
+      ...snapshot,
+      threads: [
+        ...snapshot.threads,
+        { archived: false, id: "newer-chat", projectId: null, updatedAt: 40 },
+        { archived: false, id: "older-chat", projectId: null, updatedAt: 10 },
+      ],
+    };
+    const first = planSidebarImport(original, source, options);
+    expect(
+      first.state["electron-persisted-atom-state"]["sidebar-custom-sections-v3"]
+        .account?.sections[0]?.itemKeys
+    ).toStrictEqual([
+      "codex:project:saved-project",
+      "codex:thread:local:newer-chat",
+      "codex:thread:local:older-chat",
+      "codex:thread:local:home-thread",
+    ]);
+    expect(planSidebarImport(first.state, source, options).state).toStrictEqual(
+      first.state
+    );
+  });
+
   test("infers the connected host from imported sessions and rejects conflicting ownership", () => {
     const original = state();
     expect(inferSidebarHost(original, snapshot)).toBe(options.hostId);

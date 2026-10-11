@@ -56,7 +56,7 @@ just sidebar-plan
 just sidebar-apply
 ```
 
-Snapshots contain project roots, names, session IDs, project assignments, archive flags, and the source metadata directory. They do not contain conversation text or credentials. Direct export refuses to overwrite an existing snapshot unless `--overwrite` is specified. `just sidebar-preview` refreshes its snapshot through an atomic replacement after a successful export.
+Version 2 snapshots contain project roots, names, session IDs, project assignments, last activity timestamps, archive flags, and the source metadata directory. They do not contain conversation text or credentials. Version 1 snapshots lack activity timestamps and must be refreshed with `just sidebar-preview`. Direct export refuses to overwrite an existing snapshot unless `--overwrite` is specified. `just sidebar-preview` refreshes its snapshot through an atomic replacement after a successful export.
 
 ## Options and behavior
 
@@ -71,7 +71,9 @@ Snapshots contain project roots, names, session IDs, project assignments, archiv
 
 The default endpoint respects `PI_CODEX_APP_SERVER_HOME` and `PI_CODING_AGENT_DIR`. `--help` lists each command's options.
 
-Existing projects are matched by host and normalized root. Windows roots ignore case and slash direction; Unix roots retain case. Existing project IDs and labels are preserved. In the destination section, projects appear before individual chats. Order within each group is preserved. Repeating an import produces the same state. Importing additional repositories adds entries without deleting unrelated projects.
+Existing projects are matched by host and normalized root. Windows roots ignore case and slash direction; Unix roots retain case. Existing project IDs and labels are preserved. In the destination section, projects appear before individual chats and retain their relative order. Imported chats are ordered by last activity, newest first. Equal timestamps retain their previous order. Chats outside the snapshot keep their slots among the individual chats. Repeating an import produces the same state. Importing additional repositories adds entries without deleting unrelated projects.
+
+Custom sections retain an explicit desktop item order. Changing the global chat sorting preference does not repair that saved order. The import refreshes it from source activity timestamps; it does not continuously reorder an open desktop app.
 
 The snapshot's project assignments are authoritative for its sessions. Assigned sessions appear under their repository projects. Unassigned sessions go directly into the selected section. Imported sessions are removed from Pinned. Archived sessions retain assignments but do not become direct sidebar entries. Ownership conflicts with another host, duplicate roots or section names, unknown project references, and ambiguous accounts abort before writing.
 

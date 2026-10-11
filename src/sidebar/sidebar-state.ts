@@ -7,6 +7,7 @@ export const sidebarSnapshotThreadSchema = z.object({
   archived: z.boolean().default(false),
   id: z.string().min(1),
   projectId: z.string().nullable(),
+  updatedAt: z.number().int().nonnegative(),
 });
 
 export const sidebarSnapshotSchema = z.object({
@@ -17,7 +18,7 @@ export const sidebarSnapshotSchema = z.object({
       roots: z.array(z.object({ path: z.string().min(1) })).length(1),
     })
   ),
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   sectionId: z.string().nullable(),
   sourceHome: z.string(),
   threads: z.array(sidebarSnapshotThreadSchema),
@@ -300,6 +301,36 @@ const assignThreads = (
   return { assignedIds, targetThreadIds };
 };
 
+const orderSectionItems = (
+  section: SidebarSection,
+  snapshot: SidebarSnapshot,
+  hostId: string
+): void => {
+  const timestamps = new Map<string, number>();
+  for (const thread of snapshot.threads) {
+    timestamps.set(`codex:thread:local:${thread.id}`, thread.updatedAt);
+    timestamps.set(`codex:thread:${hostId}:${thread.id}`, thread.updatedAt);
+  }
+  const chats = section.itemKeys.filter(
+    (key) => !key.startsWith("codex:project:")
+  );
+  const sorted = chats
+    .filter((key) => timestamps.has(key))
+    .toSorted((a, b) => (timestamps.get(b) ?? 0) - (timestamps.get(a) ?? 0));
+  let index = 0;
+  section.itemKeys = [
+    ...section.itemKeys.filter((key) => key.startsWith("codex:project:")),
+    ...chats.map((key) => {
+      if (!timestamps.has(key)) {
+        return key;
+      }
+      const sortedKey = sorted[index] ?? key;
+      index += 1;
+      return sortedKey;
+    }),
+  ];
+};
+
 const placeItems = (
   state: SidebarState,
   account: SidebarAccount,
@@ -358,10 +389,7 @@ const placeItems = (
       section.itemKeys.push(key);
     }
   }
-  section.itemKeys = [
-    ...section.itemKeys.filter((key) => key.startsWith("codex:project:")),
-    ...section.itemKeys.filter((key) => !key.startsWith("codex:project:")),
-  ];
+  orderSectionItems(section, snapshot, options.hostId);
 };
 
 export const planSidebarImport = (

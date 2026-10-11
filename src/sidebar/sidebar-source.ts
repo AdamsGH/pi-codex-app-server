@@ -137,7 +137,7 @@ export const readSidebarSnapshot = async (
     const threads = [...threadMap.values()];
     return sidebarSnapshotSchema.parse({
       projects,
-      schemaVersion: 1,
+      schemaVersion: 2,
       sectionId: sections.find(({ name }) => name === "Pi")?.id ?? null,
       sourceHome: initialized.codexHome,
       threads,
