@@ -132,14 +132,43 @@ describe("Sidebar import", () => {
         {
           hostSectionIds: { [options.hostId]: "server-section" },
           itemKeys: [
-            "codex:thread:local:home-thread",
             "codex:project:saved-project",
+            "codex:thread:local:home-thread",
           ],
         },
       ],
       threadHostIds: { "home-thread": options.hostId },
     });
     expect(original).toStrictEqual(state());
+  });
+
+  test("places projects before chats while preserving order within each group", () => {
+    const original = state();
+    const section =
+      original["electron-persisted-atom-state"]["sidebar-custom-sections-v3"]
+        .account?.sections[0];
+    if (!section) {
+      throw new Error("Fixture has no section");
+    }
+    section.itemKeys = [
+      "codex:thread:local:home-thread",
+      "codex:project:other-project",
+      "codex:thread:local:unrelated-thread",
+      "codex:project:saved-project",
+    ];
+    const first = planSidebarImport(original, snapshot, options);
+    expect(
+      first.state["electron-persisted-atom-state"]["sidebar-custom-sections-v3"]
+        .account?.sections[0]?.itemKeys
+    ).toStrictEqual([
+      "codex:project:other-project",
+      "codex:project:saved-project",
+      "codex:thread:local:home-thread",
+      "codex:thread:local:unrelated-thread",
+    ]);
+    expect(
+      planSidebarImport(first.state, snapshot, options).state
+    ).toStrictEqual(first.state);
   });
 
   test("rejects cross-host ownership and unknown account selection", () => {

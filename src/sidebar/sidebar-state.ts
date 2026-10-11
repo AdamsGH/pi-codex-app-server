@@ -358,6 +358,10 @@ const placeItems = (
       section.itemKeys.push(key);
     }
   }
+  section.itemKeys = [
+    ...section.itemKeys.filter((key) => key.startsWith("codex:project:")),
+    ...section.itemKeys.filter((key) => !key.startsWith("codex:project:")),
+  ];
 };
 
 export const planSidebarImport = (

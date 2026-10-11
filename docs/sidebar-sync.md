@@ -71,7 +71,7 @@ Snapshots contain project roots, names, session IDs, project assignments, archiv
 
 The default endpoint respects `PI_CODEX_APP_SERVER_HOME` and `PI_CODING_AGENT_DIR`. `--help` lists each command's options.
 
-Existing projects are matched by host and normalized root. Windows roots ignore case and slash direction; Unix roots retain case. Existing project IDs, labels, and item order are preserved. Repeating an import produces the same state. Importing additional repositories adds entries without deleting unrelated projects.
+Existing projects are matched by host and normalized root. Windows roots ignore case and slash direction; Unix roots retain case. Existing project IDs and labels are preserved. In the destination section, projects appear before individual chats. Order within each group is preserved. Repeating an import produces the same state. Importing additional repositories adds entries without deleting unrelated projects.
 
 The snapshot's project assignments are authoritative for its sessions. Assigned sessions appear under their repository projects. Unassigned sessions go directly into the selected section. Imported sessions are removed from Pinned. Archived sessions retain assignments but do not become direct sidebar entries. Ownership conflicts with another host, duplicate roots or section names, unknown project references, and ambiguous accounts abort before writing.
 
