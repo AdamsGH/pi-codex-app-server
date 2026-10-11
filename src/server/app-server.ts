@@ -109,6 +109,9 @@ export class AppServer {
       requiresOpenaiAuth: false,
     });
     connection.registerRequest("account/read", readAccount);
+    connection.registerRequest("getAuthStatus", (params, context) =>
+      this.#modelRuntime.readAuthStatus(params, context.signal)
+    );
 
     const logout = async (
       _params: undefined,

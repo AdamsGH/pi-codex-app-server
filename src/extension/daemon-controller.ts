@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import { getPackageDir } from "@earendil-works/pi-coding-agent";
+import { lock } from "proper-lockfile";
 import { z } from "zod";
 
 import type { AppServerConfig } from "../config/app-server-config.js";
@@ -101,9 +103,11 @@ type StartOutcome =
 
 export class AppDaemonController {
   readonly #config: AppServerConfig;
+  readonly #launchDaemon: () => DaemonLaunch;
 
-  constructor(config: AppServerConfig) {
+  constructor(config: AppServerConfig, launchDaemon = startDaemonProcess) {
     this.#config = config;
+    this.#launchDaemon = launchDaemon;
   }
 
   async pair(): Promise<PairingResult> {
@@ -111,11 +115,15 @@ export class AppDaemonController {
   }
 
   async start(): Promise<DaemonStatus> {
+    return await this.#withLifecycleLock(() => this.#start());
+  }
+
+  async #start(): Promise<DaemonStatus> {
     const currentStatus = await this.status();
     if (currentStatus.state === "running") {
       return currentStatus;
     }
-    const launch = startDaemonProcess();
+    const launch = this.#launchDaemon();
     const readiness = waitForDaemonEndpoint({
       expectedPid: launch.pid,
       readEndpoint: async () => {
@@ -147,6 +155,10 @@ export class AppDaemonController {
   }
 
   async stop(): Promise<DaemonStatus> {
+    return await this.#withLifecycleLock(() => this.#stop());
+  }
+
+  async #stop(): Promise<DaemonStatus> {
     const currentStatus = await this.status();
     if (currentStatus.state === "stopped") {
       return currentStatus;
@@ -158,5 +170,20 @@ export class AppDaemonController {
     );
     await rm(this.#config.paths.endpoint, { force: true });
     return { state: "stopped" };
+  }
+
+  async #withLifecycleLock<Result>(
+    action: () => Promise<Result>
+  ): Promise<Result> {
+    await mkdir(this.#config.paths.home, { recursive: true });
+    const release = await lock(this.#config.paths.home, {
+      lockfilePath: path.join(this.#config.paths.home, "daemon-start.lock"),
+      retries: { maxTimeout: 1000, minTimeout: 100, retries: 60 },
+    });
+    try {
+      return await action();
+    } finally {
+      await release();
+    }
   }
 }

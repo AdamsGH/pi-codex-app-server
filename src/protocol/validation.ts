@@ -21,6 +21,7 @@ const INT_32_MAX = 2 ** 31 - 1;
 const UINT_16_MAX = 2 ** 16 - 1;
 const UINT_32_MAX = 2 ** 32 - 1;
 const jsonValueSchema = z.json();
+const emptyParamsSchema = z.strictObject({});
 
 export type JsonValue = z.infer<typeof jsonValueSchema>;
 type RequestId = string | number;
@@ -108,7 +109,47 @@ ajv.addFormat("uint64", {
 });
 
 const validateWireMessage = ajv.compile<CodexWireMessage>(jsonRpcMessageSchema);
-const validateClientRequest = ajv.compile<ClientRequest>(clientRequestSchema);
+const clientRequestValidators = new Map<
+  string,
+  {
+    readonly parameterless: boolean;
+    readonly validate: ValidateFunction<ClientRequest>;
+  }
+>();
+for (const branch of clientRequestSchema.oneOf) {
+  const [method] = branch.properties.method.enum;
+  if (method) {
+    clientRequestValidators.set(method, {
+      parameterless:
+        "type" in branch.properties.params &&
+        branch.properties.params.type === "null",
+      validate: ajv.compile<ClientRequest>({
+        ...branch,
+        definitions: clientRequestSchema.definitions,
+      }),
+    });
+  }
+}
+// The desktop still calls this method, but Schemars omits it from ClientRequest.
+clientRequestValidators.set("getAuthStatus", {
+  parameterless: false,
+  validate: ajv.compile<ClientRequest>({
+    properties: {
+      id: { anyOf: [{ type: "string" }, { type: "integer" }] },
+      method: { const: "getAuthStatus" },
+      params: {
+        properties: {
+          includeToken: { type: ["boolean", "null"] },
+          refreshToken: { type: ["boolean", "null"] },
+        },
+        required: ["includeToken", "refreshToken"],
+        type: "object",
+      },
+    },
+    required: ["id", "method", "params"],
+    type: "object",
+  }),
+});
 const validateClientNotification = ajv.compile<ClientNotification>(
   clientNotificationSchema
 );
@@ -121,7 +162,7 @@ type ResponseSchemaMap =
   | typeof CodexServerResponseSchemas;
 const compileResponseSchemas = (
   schemas: ResponseSchemaMap
-): ReadonlyMap<string, ValidateFunction<JsonValue>> => {
+): Map<string, ValidateFunction<JsonValue>> => {
   const validators = new Map<string, ValidateFunction<JsonValue>>();
   for (const [method, schema] of Object.entries(schemas)) {
     validators.set(method, ajv.compile<JsonValue>(schema));
@@ -130,6 +171,29 @@ const compileResponseSchemas = (
 };
 const clientResponseValidators = compileResponseSchemas(
   CodexClientResponseSchemas
+);
+clientResponseValidators.set(
+  "getAuthStatus",
+  ajv.compile<JsonValue>({
+    properties: {
+      authMethod: {
+        enum: [
+          "apikey",
+          "chatgpt",
+          "chatgptAuthTokens",
+          "headers",
+          "agentIdentity",
+          "personalAccessToken",
+          "bedrockApiKey",
+          null,
+        ],
+      },
+      authToken: { type: ["string", "null"] },
+      requiresOpenaiAuth: { type: ["boolean", "null"] },
+    },
+    required: ["authMethod", "authToken", "requiresOpenaiAuth"],
+    type: "object",
+  })
 );
 const serverResponseValidators = compileResponseSchemas(
   CodexServerResponseSchemas
@@ -173,12 +237,26 @@ export const removeJsonRpcVersion = (
   return wireMessage;
 };
 
-export const parseClientRequest = (value: CodexWireMessage): ClientRequest =>
-  requireValid(
-    validateClientRequest,
-    jsonValueSchema.parse(value),
-    "Codex client request"
+export const parseClientRequest = (value: CodexWireMessage): ClientRequest => {
+  const { method } = value;
+  const entry =
+    method === undefined ? undefined : clientRequestValidators.get(method);
+  if (!entry) {
+    throw new ProtocolValidationError(
+      `Unsupported Codex client method: ${method ?? "missing method"}`
+    );
+  }
+  const params = "params" in value ? value.params : undefined;
+  const emptyParams =
+    params === undefined || emptyParamsSchema.safeParse(params).success;
+  const request =
+    entry.parameterless && emptyParams ? { ...value, params: null } : value;
+  return requireValid(
+    entry.validate,
+    jsonValueSchema.parse(request),
+    `Codex client request for ${method}`
   );
+};
 
 export const parseClientNotification = (
   value: CodexWireMessage

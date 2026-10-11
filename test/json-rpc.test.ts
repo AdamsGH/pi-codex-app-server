@@ -25,6 +25,39 @@ const oneExperimentalRequest =
   };
 
 describe("JSON-RPC boundary", () => {
+  test("accepts the desktop post-initialize authentication request", () => {
+    const request = {
+      id: "desktop-auth:repro",
+      method: "getAuthStatus",
+      params: { includeToken: false, refreshToken: false },
+    };
+    expect(parseClientRequest(request)).toStrictEqual(request);
+  });
+
+  test("accepts empty or omitted parameters for parameterless desktop requests", () => {
+    for (const params of [{}, undefined, null]) {
+      expect(() =>
+        parseClientRequest({ id: 1, method: "configRequirements/read", params })
+      ).not.toThrow();
+    }
+    expect(() =>
+      parseClientRequest({
+        id: 1,
+        method: "configRequirements/read",
+        params: { unexpected: true },
+      })
+    ).toThrow(ProtocolValidationError);
+  });
+
+  test("reports only the selected method's invalid parameters", () => {
+    expect(() =>
+      parseClientRequest({ id: 1, method: "initialize", params: {} })
+    ).toThrow(/initialize.*clientInfo/u);
+    expect(() =>
+      parseClientRequest({ id: 1, method: "initialize", params: {} })
+    ).not.toThrow(/threadId/u);
+  });
+
   test("parses Codex's headerless wire messages", () => {
     const request = parseCodexWireMessage(
       '{"id":7,"method":"initialize","params":{"clientInfo":{"name":"test","title":null,"version":"1"},"capabilities":null}}'

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import type { Logger } from "@logtape/logtape";
+import { lock } from "proper-lockfile";
 import type { WebSocket } from "ws";
 import { WebSocketServer } from "ws";
 import { z } from "zod";
@@ -53,7 +55,7 @@ const handleSocket = async (
   }
 };
 
-export const runDaemon = async (config: AppServerConfig): Promise<void> => {
+const runLockedDaemon = async (config: AppServerConfig): Promise<void> => {
   if (config.listenUrl.protocol !== "ws:") {
     throw new Error(
       "Direct daemon listening supports ws://. Terminate TLS in a local proxy for wss://."
@@ -109,5 +111,17 @@ export const runDaemon = async (config: AppServerConfig): Promise<void> => {
     remoteControlRelay.close();
     await remoteControlTask;
     appServer.close();
+  }
+};
+
+export const runDaemon = async (config: AppServerConfig): Promise<void> => {
+  const release = await lock(config.paths.home, {
+    lockfilePath: path.join(config.paths.home, "daemon.lock"),
+    retries: { maxTimeout: 1000, minTimeout: 1000, retries: 12 },
+  });
+  try {
+    await runLockedDaemon(config);
+  } finally {
+    await release();
   }
 };

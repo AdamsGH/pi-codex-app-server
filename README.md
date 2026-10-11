@@ -150,7 +150,7 @@ Built against the vendored Codex app-server protocol v2 schemas in [vendor/opena
 
 Implemented today:
 
-- Lifecycle: `initialize`, `initialized`, `account/read`, `account/logout`, `model/list`, `modelProvider/capabilities/read`
+- Lifecycle: `initialize`, `initialized`, `getAuthStatus`, `account/read`, `account/logout`, `model/list`, `modelProvider/capabilities/read`
 - Threads: `thread/list`, `thread/read`, `thread/start`, `thread/resume`, `thread/loaded/list`, `thread/name/set`, `thread/compact/start`, `thread/archive`, `thread/unarchive`, `thread/delete`, `thread/unsubscribe`
 - Turns: `turn/start`, `turn/steer`, `turn/interrupt`
 - Streaming notifications: `thread/started`, `thread/name/updated`, `turn/started`, `turn/completed`, `item/started`, `item/completed`, `item/agentMessage/delta`, `item/reasoning/textDelta`
@@ -158,6 +158,10 @@ Implemented today:
 Two details worth knowing if you are reading the wire. Codex omits the `"jsonrpc":"2.0"` member, so this server adds it only while a message is inside the `json-rpc-2.0` library and strips it before sending. Cancellation is the protocol-level `turn/interrupt` request, not `$/cancelRequest`.
 
 Each connection requires a successful `initialize` before other requests. Repeating it on the same JSON-RPC connection returns `Already initialized`. `capabilities.optOutNotificationMethods` suppresses exact notification names for that connection. Remote Control can recreate the JSON-RPC connection on a newer stream initialization while retaining its sequence and unacknowledged messages.
+
+The desktop's post-initialize `getAuthStatus` request uses Pi's auth runtime and returns a token only when `includeToken` is true. This method has generated TypeScript types but is absent from the upstream JSON Schema, so its request and response are validated explicitly. Parameterless methods accept omitted parameters, `null`, or an empty object. Validation errors report the selected method's constraints.
+
+Daemon start and stop operations are serialized across Pi windows. A separate lock permits only one daemon per app-server home, including standalone CLI launches. Locks use a heartbeat and expire after a crashed owner stops updating them.
 
 Remote Control replays unacknowledged output before new events and sends all chunks of a message before later sequences. Partial chunk ACKs retain the remaining chunks. Explicit client closure retires the stream's replay state. Historical Pi system messages are omitted from the client view without changing the session file. Turn completion distinguishes model failures, successful runs, and cancellation, following the [app-server lifecycle](https://learn.chatgpt.com/docs/app-server).
 
