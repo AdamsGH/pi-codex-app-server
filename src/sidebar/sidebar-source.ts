@@ -71,7 +71,14 @@ export const readSidebarSnapshot = async (
   );
   const requester = client.timeout(30_000);
   try {
-    await once(socket, "open");
+    try {
+      await once(socket, "open");
+    } catch (error) {
+      throw new Error(
+        "Cannot connect to the Pi daemon. Run 'just daemon' in a separate terminal, leave it running, then retry 'just sidebar-preview'. Applying a saved snapshot with 'just sidebar-apply' does not need the daemon.",
+        { cause: error }
+      );
+    }
     const initialized = z.object({ codexHome: z.string() }).parse(
       await requester.request("initialize", {
         capabilities: { experimentalApi: true },

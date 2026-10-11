@@ -124,7 +124,7 @@ Logs go to stderr as JSON Lines. Email addresses and JWTs are redacted on the wa
 Repository sessions share projects by Git root. Other sessions use the Pi section. Projects, section membership, and manual moves persist across daemon restarts. Codex desktop also needs its saved remote-project catalog populated. Use the reusable [sidebar sync script](docs/sidebar-sync.md) to preview, import, or restore that state.
 
 ```powershell
-bun run sidebar sync --host-id 'remote-control:ENVIRONMENT_ID' --dry-run
+just sidebar-preview
 ```
 
 Apply from a separate terminal with Codex desktop closed. The script creates a backup and verifies the replacement. It also supports export/apply when Pi runs on another machine.

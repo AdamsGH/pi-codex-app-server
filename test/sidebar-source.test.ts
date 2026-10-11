@@ -33,6 +33,16 @@ const requestSchema = z.object({
 });
 
 describe("Sidebar source", () => {
+  test("reports how to recover a stale daemon endpoint", async () => {
+    const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+    await once(server, "listening");
+    const address = z.object({ port: z.number() }).parse(server.address());
+    await promisify(server.close.bind(server))();
+    await expect(
+      readSidebarSnapshot(`ws://127.0.0.1:${address.port}`)
+    ).rejects.toThrow("just daemon");
+  });
+
   test("initializes and follows project and active/archived thread pagination", async () => {
     const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
     const requests: string[] = [];

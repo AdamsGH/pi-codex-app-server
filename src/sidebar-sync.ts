@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -13,6 +14,7 @@ import {
 import { readSidebarSnapshot } from "./sidebar/sidebar-source.js";
 import {
   planSidebarImport,
+  inferSidebarHost,
   sidebarSnapshotSchema,
 } from "./sidebar/sidebar-state.js";
 import type { SidebarSnapshot } from "./sidebar/sidebar-state.js";
@@ -30,7 +32,14 @@ const importOptionsSchema = z.object({
   accountId: z.string().optional(),
   codexHome: z.string(),
   dryRun: z.boolean().default(false),
-  hostId: z.string().min(1),
+  hostId: z
+    .string()
+    .refine(
+      (value) =>
+        value.length > 0 && value !== "local" && !value.startsWith("-"),
+      "--host-id requires a remote host ID, not another option"
+    )
+    .optional(),
   section: z.string().min(1),
 });
 
@@ -48,17 +57,16 @@ const applySnapshot = async (
     ".codex-global-state.json"
   );
   const original = await readFile(statePath, "utf-8");
-  const plan = planSidebarImport(
-    parseSidebarFile(original),
-    sidebarSnapshotSchema.parse(snapshot),
-    {
-      accountId: options.accountId,
-      hostId: options.hostId,
-      sectionName: options.section,
-    }
-  );
+  const state = parseSidebarFile(original);
+  const hostId =
+    options.hostId ?? inferSidebarHost(state, snapshot, options.accountId);
+  const plan = planSidebarImport(state, sidebarSnapshotSchema.parse(snapshot), {
+    accountId: options.accountId,
+    hostId,
+    sectionName: options.section,
+  });
   process.stdout.write(
-    `${JSON.stringify({ accountId: plan.accountId, assignedThreads: plan.assignedThreads, createdProjects: plan.createdProjects, dryRun: options.dryRun, hostId: options.hostId, projectCount: plan.projectCount, section: options.section, statePath }, null, 2)}\n`
+    `${JSON.stringify({ accountId: plan.accountId, assignedThreads: plan.assignedThreads, createdProjects: plan.createdProjects, dryRun: options.dryRun, hostId, projectCount: plan.projectCount, section: options.section, statePath }, null, 2)}\n`
   );
   if (options.dryRun) {
     return;
@@ -83,20 +91,40 @@ export const runSidebarSync = async (
       defaultEndpoint
     )
     .requiredOption("--output <file>", "Snapshot to create")
-    .action(async (options: { endpoint: string; output: string }) => {
-      const snapshot = await readSidebarSnapshot(options.endpoint);
-      await writeFile(
-        options.output,
-        `${JSON.stringify(snapshot, null, 2)}\n`,
-        { flag: "wx", mode: 0o600 }
-      );
-      process.stdout.write(
-        `Exported ${snapshot.projects.length} projects and ${snapshot.threads.length} sessions to ${options.output}\n`
-      );
-    });
+    .option("--overwrite", "Atomically replace an existing snapshot", false)
+    .action(
+      async (options: {
+        endpoint: string;
+        output: string;
+        overwrite: boolean;
+      }) => {
+        const snapshot = await readSidebarSnapshot(options.endpoint);
+        const output = path.resolve(options.output);
+        await mkdir(path.dirname(output), { recursive: true });
+        const serialized = `${JSON.stringify(snapshot, null, 2)}\n`;
+        if (options.overwrite) {
+          const temporary = `${output}.${randomUUID()}.tmp`;
+          try {
+            await writeFile(temporary, serialized, { flag: "wx", mode: 0o600 });
+            await rename(temporary, output);
+          } finally {
+            await rm(temporary, { force: true });
+          }
+        } else {
+          await writeFile(output, serialized, { flag: "wx", mode: 0o600 });
+        }
+        process.stdout.write(
+          `Exported ${snapshot.projects.length} projects and ${snapshot.threads.length} sessions to ${options.output}\n`
+        );
+      }
+    );
   const addImportOptions = (command: Command): Command =>
     command
-      .requiredOption("--host-id <id>", "Connected host ID in Codex desktop")
+      .option(
+        "--host-id <id>",
+        "Connected host ID; inferred from imported sessions when omitted",
+        process.env.PI_CODEX_HOST_ID
+      )
       .option(
         "--codex-home <directory>",
         "Desktop state directory",
@@ -133,13 +161,11 @@ export const runSidebarSync = async (
         defaultEndpoint
       )
   ).action(async (options: { endpoint: string; dryRun: boolean }) => {
-    if (!options.dryRun) {
+    const parsed = importOptionsSchema.parse(options);
+    if (!parsed.dryRun) {
       await assertDesktopStopped();
     }
-    await applySnapshot(
-      await readSidebarSnapshot(options.endpoint),
-      importOptionsSchema.parse(options)
-    );
+    await applySnapshot(await readSidebarSnapshot(options.endpoint), parsed);
   });
   program
     .command("restore")

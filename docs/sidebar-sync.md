@@ -6,28 +6,40 @@ Codex desktop also keeps a saved remote-project catalog in `.codex-global-state.
 
 ## Run on the same machine
 
-Run from the repository with dependencies installed. Keep the Pi daemon running. Preview works while Codex desktop is open:
+Run these recipes from the repository in an external terminal. `just` lists the available commands. `just install` installs dependencies from the lockfile. Each sidebar recipe builds the CLI first.
+
+If the daemon is stopped, run this in a separate terminal and keep it open:
 
 ```powershell
-bun run sidebar sync --host-id 'remote-control:ENVIRONMENT_ID' --dry-run
+just daemon
 ```
 
-Use the connected host ID shown by Codex, including its `remote-control:` or `remote-ssh-...:` prefix. The endpoint must belong to that host. The script cannot verify a desktop host ID against an arbitrary endpoint.
+With Codex desktop still open, export a fresh snapshot and preview the import:
+
+```powershell
+just sidebar-preview
+```
+
+This writes `.cache/pi-sidebar.snapshot.json` and prints the plan without changing desktop state. The host is inferred from matching source section bindings and ownership of the imported sessions. Conflicting or missing bindings abort. No PowerShell variable is required.
 
 Exit Codex desktop, including any tray instance. Run from a separate terminal:
 
 ```powershell
-bun run sidebar sync --host-id 'remote-control:ENVIRONMENT_ID'
+just sidebar-apply
 ```
 
-Open Codex again. The command prints a verified completion message and the backup path. It does not close or restart the app, launch background helpers, or modify Pi history.
+Open Codex again. Apply reads the saved snapshot and does not connect to the daemon. The daemon can stop when Codex exits without breaking the import. The command prints a verified completion message and the backup path. It does not close or restart the app, launch background helpers, or modify Pi history. `just sidebar-plan` previews the saved snapshot without a daemon connection. Refresh with `just sidebar-preview` if sessions or project assignments changed before applying.
 
-After building, the same command works with Node.js 22.18 or newer:
+For another host or a custom snapshot location, add an ignored `.env` file at the repository root. `just` loads it:
 
-```powershell
-bun run build
-node dist/sidebar-sync.js sync --host-id 'remote-control:ENVIRONMENT_ID' --dry-run
+```dotenv
+PI_CODEX_HOST_ID=remote-control:ENVIRONMENT_ID
+PI_SIDEBAR_SNAPSHOT=.cache/pi-sidebar.snapshot.json
 ```
+
+Set `PI_CODEX_HOST_ID` only when inference is unavailable or you need an explicit selection. Use the connected host ID shown by Codex, including its `remote-control:` or `remote-ssh-...:` prefix. The endpoint must belong to that host. The script cannot verify an explicit desktop host ID against an arbitrary endpoint. `PI_CODEX_APP_SERVER_HOME`, `PI_CODING_AGENT_DIR`, and `CODEX_HOME` also work in `.env`.
+
+The built CLI works with Node.js 22.18 or newer. `sync --dry-run` remains available for direct use, but the recipes use export followed by offline apply so closing desktop cannot remove their source endpoint.
 
 ## Pi runs on another machine
 
@@ -37,20 +49,20 @@ Export on the machine running the daemon:
 node dist/sidebar-sync.js export --output pi-sidebar.snapshot.json
 ```
 
-Copy that snapshot to the desktop machine. Preview, then apply with Codex desktop closed:
+Copy that snapshot to `.cache/pi-sidebar.snapshot.json` on the desktop machine. Create the parent directory if needed. Preview, then apply with Codex desktop closed:
 
 ```powershell
-node dist/sidebar-sync.js apply --input pi-sidebar.snapshot.json --host-id 'remote-control:ENVIRONMENT_ID' --dry-run
-node dist/sidebar-sync.js apply --input pi-sidebar.snapshot.json --host-id 'remote-control:ENVIRONMENT_ID'
+just sidebar-plan
+just sidebar-apply
 ```
 
-Snapshots contain project roots, names, session IDs, project assignments, archive flags, and the source metadata directory. They do not contain conversation text or credentials. Export refuses to overwrite an existing snapshot. Choose a new filename when refreshing it.
+Snapshots contain project roots, names, session IDs, project assignments, archive flags, and the source metadata directory. They do not contain conversation text or credentials. Direct export refuses to overwrite an existing snapshot unless `--overwrite` is specified. `just sidebar-preview` refreshes its snapshot through an atomic replacement after a successful export.
 
 ## Options and behavior
 
 | Option | Default | Purpose |
 | --- | --- | --- |
-| `--host-id` | Required for sync/apply | Connected host owning the imported sessions |
+| `--host-id` | `PI_CODEX_HOST_ID`, otherwise inferred | Connected host owning the imported sessions |
 | `--endpoint` | `<Pi app-server home>/endpoint.json` | Endpoint file or `ws://` / `wss://` URL; used by sync/export |
 | `--codex-home` | `CODEX_HOME`, otherwise `~/.codex` | Desktop state directory |
 | `--section` | `Pi` | Destination sidebar section name |
@@ -74,7 +86,7 @@ The writer locks the state file against another script instance, verifies that t
 To restore, close Codex and pass the exact backup path printed by the command:
 
 ```powershell
-node dist/sidebar-sync.js restore --backup 'C:\path\.codex-global-state.json.sidebar-backup-TIMESTAMP-UUID'
+just sidebar-restore 'C:\path\.codex-global-state.json.sidebar-backup-TIMESTAMP-UUID'
 ```
 
 Restore replaces the whole desktop state with the backup, including settings changed after that backup. It first backs up the current state. Snapshots and backups are created with mode `0600` where the operating system supports Unix permissions.

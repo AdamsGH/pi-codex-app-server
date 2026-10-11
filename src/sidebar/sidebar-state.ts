@@ -92,6 +92,58 @@ const rootKey = (root: string): string => {
 };
 
 export type SidebarState = z.infer<typeof sidebarStateSchema>;
+
+export const inferSidebarHost = (
+  state: SidebarState,
+  snapshot: SidebarSnapshot,
+  accountId?: string
+): string => {
+  const accounts =
+    state["electron-persisted-atom-state"]["sidebar-custom-sections-v3"];
+  if (accountId && !accounts[accountId]) {
+    throw new Error(`Unknown sidebar account: ${accountId}`);
+  }
+  const hosts = new Set<string>();
+  const addHost = (host: string | undefined): void => {
+    if (host && host !== "local") {
+      hosts.add(host);
+    }
+  };
+  const selected = Object.entries(accounts).filter(
+    ([id]) => !accountId || id === accountId
+  );
+  for (const [, account] of selected) {
+    for (const section of account.sections) {
+      for (const [host, sectionId] of Object.entries(
+        section.hostSectionIds ?? {}
+      )) {
+        if (snapshot.sectionId && sectionId === snapshot.sectionId) {
+          addHost(host);
+        }
+      }
+    }
+    for (const thread of snapshot.threads) {
+      const host = account.threadHostIds[thread.id];
+      addHost(host);
+    }
+  }
+  for (const thread of snapshot.threads) {
+    const assignment = state["thread-project-assignments"][thread.id];
+    for (const host of [
+      assignment?.hostId,
+      state["thread-project-membership-host-ids"][thread.id],
+    ]) {
+      addHost(host);
+    }
+  }
+  const [host] = hosts;
+  if (hosts.size !== 1 || !host) {
+    throw new Error(
+      "Cannot infer a unique sidebar host. Set PI_CODEX_HOST_ID or pass --host-id with the connected host ID."
+    );
+  }
+  return host;
+};
 type SidebarAccount = z.infer<typeof accountSchema>;
 type SidebarSection = z.infer<typeof sectionSchema>;
 

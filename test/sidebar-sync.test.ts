@@ -4,8 +4,10 @@ import path from "node:path";
 
 import { describe, expect, test, vi } from "vitest";
 
+import { runSidebarSync } from "../src/sidebar-sync.js";
 import { replaceSidebarFile } from "../src/sidebar/sidebar-files.js";
 import {
+  inferSidebarHost,
   planSidebarImport,
   sidebarSnapshotSchema,
   sidebarStateSchema,
@@ -66,6 +68,44 @@ const state = () =>
   });
 
 describe("Sidebar import", () => {
+  test("infers the connected host from imported sessions and rejects conflicting ownership", () => {
+    const original = state();
+    expect(inferSidebarHost(original, snapshot)).toBe(options.hostId);
+    original["thread-project-membership-host-ids"]["repo-thread"] =
+      "remote-control:other";
+    expect(() => inferSidebarHost(original, snapshot)).toThrow(
+      "unique sidebar host"
+    );
+    expect(() =>
+      inferSidebarHost(sidebarStateSchema.parse({}), snapshot)
+    ).toThrow("PI_CODEX_HOST_ID");
+    expect(() => inferSidebarHost(original, snapshot, "unknown")).toThrow(
+      "Unknown sidebar account"
+    );
+  });
+
+  test("infers a host from its exact source section binding even with no sessions", () => {
+    const original = state();
+    const section =
+      original["electron-persisted-atom-state"]["sidebar-custom-sections-v3"]
+        .account?.sections[0];
+    if (!section) {
+      throw new Error("Fixture has no section");
+    }
+    section.hostSectionIds = {
+      [options.hostId]: snapshot.sectionId ?? "",
+    };
+    expect(inferSidebarHost(original, { ...snapshot, threads: [] })).toBe(
+      options.hostId
+    );
+  });
+
+  test("rejects a flag consumed as a missing host value before checking desktop processes", async () => {
+    await expect(
+      runSidebarSync(["node", "sidebar-sync", "sync", "--host-id", "--dry-run"])
+    ).rejects.toThrow("--host-id requires a remote host ID");
+  });
+
   test("reuses host/root projects, preserves unknown state, and is idempotent", () => {
     const original = state();
     const first = planSidebarImport(original, snapshot, options);
