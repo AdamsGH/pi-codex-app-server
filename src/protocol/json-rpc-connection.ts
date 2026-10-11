@@ -66,6 +66,16 @@ type CodexJsonRpcPeer = TypedJSONRPCServerAndClient<
   JsonRpcRequestContext
 >;
 
+const initializationError = (
+  method: ClientMethod,
+  initialized: boolean
+): string | undefined => {
+  if (method === "initialize") {
+    return initialized ? "Already initialized" : undefined;
+  }
+  return initialized ? undefined : "Not initialized";
+};
+
 export class JsonRpcConnection {
   readonly #abortController = new AbortController();
   readonly #clientId: string;
@@ -75,6 +85,8 @@ export class JsonRpcConnection {
   readonly #pendingServerRequests = new Map<string | number, ServerMethod>();
   readonly #peer: CodexJsonRpcPeer;
   readonly #transport: MessageTransport;
+  #initialized = false;
+  #optOutNotificationMethods = new Set<string>();
 
   constructor(options: {
     readonly clientId: string;
@@ -128,7 +140,12 @@ export class JsonRpcConnection {
     const initialized = (
       _params: undefined,
       context: JsonRpcRequestContext
-    ): void | PromiseLike<void> => handler(context);
+    ): void | PromiseLike<void> => {
+      if (!this.#initialized) {
+        return;
+      }
+      return handler(context);
+    };
     this.#peer.server.addMethod("initialized", initialized);
   }
 
@@ -151,6 +168,9 @@ export class JsonRpcConnection {
     method: Method,
     params: ServerNotificationParams<Method>
   ): void {
+    if (this.#optOutNotificationMethods.has(method)) {
+      return;
+    }
     this.#peer.notify(method, params, this.#context);
   }
 
@@ -178,6 +198,24 @@ export class JsonRpcConnection {
       if ("method" in message) {
         if ("id" in message) {
           const request = parseClientRequest(message);
+          const handshakeError = initializationError(
+            request.method,
+            this.#initialized
+          );
+          if (handshakeError) {
+            await this.#transport.send(
+              JSON.stringify({
+                error: { code: -32_000, message: handshakeError },
+                id: request.id,
+              })
+            );
+            return;
+          }
+          if (request.method === "initialize") {
+            this.#optOutNotificationMethods = new Set(
+              request.params.capabilities?.optOutNotificationMethods
+            );
+          }
           this.#pendingClientRequests.set(request.id, request.method);
         } else {
           parseClientNotification(message);
@@ -237,6 +275,9 @@ export class JsonRpcConnection {
       const method = this.#pendingClientRequests.get(message.id);
       if (method && message.result !== undefined) {
         validateClientResponse(method, message.result);
+        if (method === "initialize") {
+          this.#initialized = true;
+        }
       }
       this.#pendingClientRequests.delete(message.id);
     }

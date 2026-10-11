@@ -37,7 +37,6 @@ const platformOs = (): string => {
 };
 
 export class AppServer {
-  readonly #clients = new Map<string, InitializeParams>();
   readonly #config: AppServerConfig;
   readonly #database: MetadataDatabase;
   readonly #modelCatalog: PiModelCatalog;
@@ -81,11 +80,7 @@ export class AppServer {
     connection.registerCompatibilityFallbacks();
     registerNeutralCompatibilityResponses(connection);
 
-    const initialize = (
-      params: InitializeParams,
-      context: { readonly clientId: string }
-    ): InitializeResponse => {
-      this.#clients.set(context.clientId, params);
+    const initialize = (_params: InitializeParams): InitializeResponse => {
       const response: InitializeResponse = {
         codexHome: this.#config.paths.home,
         platformFamily: platform() === "win32" ? "windows" : "unix",
@@ -95,13 +90,6 @@ export class AppServer {
       return response;
     };
     connection.registerRequest("initialize", initialize);
-
-    const initialized = (context: { readonly clientId: string }): void => {
-      if (!this.#clients.has(context.clientId)) {
-        throw new Error("Client is not initialized");
-      }
-    };
-    connection.registerInitialized(initialized);
 
     const listModels = (
       params: Parameters<PiModelCatalog["list"]>[0],
@@ -185,7 +173,7 @@ export class AppServer {
         runtimeWorkspaceRoots: [sessionManager.getCwd()],
         sandbox: { type: "dangerFullAccess" as const },
         serviceTier: null,
-        thread,
+        thread: this.#liveSessionManager.withActiveTurn(thread),
         turnsBackwardsCursor: null,
       };
     };

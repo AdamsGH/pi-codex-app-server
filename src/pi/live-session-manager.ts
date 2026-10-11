@@ -25,6 +25,7 @@ import type { TurnSteerParams } from "../../vendor/openai-codex-app-server-proto
 import type { TurnSteerResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnSteerResponse.js";
 import type { UserInput } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/UserInput.js";
 import type { JsonRpcConnection } from "../protocol/json-rpc-connection.js";
+import { projectPiConversation } from "./conversation-projector.js";
 import { PiModelCatalog } from "./model-catalog.js";
 import type { PiModelRuntime } from "./pi-model-runtime.js";
 import type { PiSessionRepository } from "./session-repository.js";
@@ -74,6 +75,9 @@ interface LoadedSession {
 }
 
 interface ActiveTurn {
+  readonly historyTurnCount: number;
+  interrupted: boolean;
+  failure?: Error;
   readonly agentItems: Map<
     number,
     Extract<ThreadItem, { type: "agentMessage" }>
@@ -302,6 +306,17 @@ const handleToolEvent = (
 };
 
 const handleEvent = (active: ActiveTurn, event: AgentSessionEvent): void => {
+  if (event.type === "message_end" && event.message.role === "assistant") {
+    if (event.message.stopReason === "aborted") {
+      active.interrupted = true;
+    } else if (event.message.stopReason === "error") {
+      active.failure = new Error(
+        event.message.errorMessage ?? "Pi model request failed"
+      );
+    } else {
+      active.failure = undefined;
+    }
+  }
   if (event.type === "message_update") {
     handleMessageUpdate(active, event);
   } else {
@@ -401,6 +416,11 @@ export class PiLiveSessionManager {
     const active: ActiveTurn = {
       agentItems: new Map(),
       connection,
+      historyTurnCount: projectPiConversation(
+        loaded.session.sessionManager.getBranch(),
+        loaded.session.sessionManager.getCwd()
+      ).length,
+      interrupted: false,
       reasoningItems: new Map(),
       startedAtMs: Date.now(),
       threadId: params.threadId,
@@ -435,11 +455,28 @@ export class PiLiveSessionManager {
     }
   }
 
+  withActiveTurn(thread: Thread): Thread {
+    const active = this.#loaded.get(thread.id)?.active;
+    if (!active) {
+      return thread;
+    }
+    return {
+      ...thread,
+      status: { activeFlags: [], type: "active" },
+      // Persisted history can contain a partial turn with different projected IDs.
+      turns: [
+        ...thread.turns.slice(0, active.historyTurnCount),
+        structuredClone(active.turn),
+      ],
+    };
+  }
+
   async interrupt(threadId: string, turnId: string): Promise<void> {
     const loaded = this.#loaded.get(threadId);
     if (!(loaded?.active && loaded.active.turn.id === turnId)) {
       throw new Error(`Active turn not found: ${turnId}`);
     }
+    loaded.active.interrupted = true;
     await loaded.session.abort();
   }
 
@@ -498,18 +535,21 @@ export class PiLiveSessionManager {
         images: await images(input),
         source: "rpc",
       });
-      active.turn.status = "completed";
+      if (active.failure) {
+        throw active.failure;
+      }
+      active.turn.status = active.interrupted ? "interrupted" : "completed";
     } catch (error) {
       const failure =
         error instanceof Error ? error : new Error("Pi turn failed");
-      active.turn.error = {
-        additionalDetails: null,
-        codexErrorInfo: null,
-        message: failure.message,
-      };
-      active.turn.status = loaded.session.isStreaming
-        ? "failed"
-        : "interrupted";
+      active.turn.status = active.interrupted ? "interrupted" : "failed";
+      if (!active.interrupted) {
+        active.turn.error = {
+          additionalDetails: null,
+          codexErrorInfo: null,
+          message: failure.message,
+        };
+      }
     } finally {
       active.unsubscribe?.();
       active.turn.completedAt = Math.floor(Date.now() / 1000);

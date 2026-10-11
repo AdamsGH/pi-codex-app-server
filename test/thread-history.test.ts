@@ -42,6 +42,14 @@ const syntheticHistory = [
 
 const read = async function* read(): AsyncIterable<string> {
   yield JSON.stringify({
+    id: 0,
+    method: "initialize",
+    params: {
+      capabilities: null,
+      clientInfo: { name: "history-test", title: null, version: "1" },
+    },
+  });
+  yield JSON.stringify({
     id: 1,
     method: "thread/read",
     params: { includeTurns: false, threadId: "synthetic-session" },
@@ -122,7 +130,10 @@ describe("Thread history", () => {
           close: () => {},
           read,
           send: (message) => {
-            responses.push(parseCodexWireMessage(message));
+            const response = parseCodexWireMessage(message);
+            if (response.id !== 0) {
+              responses.push(response);
+            }
             return Promise.resolve();
           },
         },

@@ -20,6 +20,7 @@ import type { MessageTransport } from "../src/transports/message-transport.js";
 
 const oneExperimentalRequest =
   async function* oneExperimentalRequest(): AsyncIterable<string> {
+    yield '{"id":0,"method":"initialize","params":{"clientInfo":{"name":"test","version":"1"},"capabilities":null}}';
     yield '{"id":11,"method":"collaborationMode/list","params":{}}';
   };
 
@@ -114,8 +115,8 @@ describe("JSON-RPC boundary", () => {
 
     await connection.run();
 
-    expect(sent).toHaveLength(1);
-    expect(parseCodexWireMessage(sent[0] ?? "")).toMatchObject({
+    expect(sent).toHaveLength(2);
+    expect(parseCodexWireMessage(sent[1] ?? "")).toMatchObject({
       id: 11,
       result: { data: [] },
     });
@@ -130,5 +131,56 @@ describe("JSON-RPC boundary", () => {
         release: "10.0.26200",
       })
     ).toBe("codex_cli_rs/0.149.0 (Windows 10.0.26200; x86_64) dumb");
+  });
+
+  test("enforces per-connection initialization and exact notification opt-outs", async () => {
+    const sent: string[] = [];
+    const requests = [
+      '{"id":1,"method":"thread/loaded/list","params":{}}',
+      JSON.stringify({
+        id: 2,
+        method: "initialize",
+        params: {
+          capabilities: {
+            optOutNotificationMethods: ["thread/name/updated", "unknown"],
+          },
+          clientInfo: { name: "test", version: "1" },
+        },
+      }),
+      '{"method":"initialized"}',
+      '{"id":3,"method":"initialize","params":{"clientInfo":{"name":"test","version":"1"}}}',
+      '{"id":4,"method":"thread/loaded/list","params":{}}',
+    ];
+    const read = async function* read(): AsyncIterable<string> {
+      yield* requests;
+    };
+    const connection = new JsonRpcConnection({
+      clientId: "handshake-test",
+      logger: appServerLogger,
+      transport: {
+        close: () => {},
+        read,
+        send: (message) => {
+          sent.push(message);
+          return Promise.resolve();
+        },
+      },
+    });
+    connection.registerCompatibilityFallbacks();
+    connection.registerInitialized(() => {
+      connection.notify("thread/name/updated", {
+        threadId: "thread",
+        threadName: "name",
+      });
+      connection.notify("thread/archived", { threadId: "thread" });
+    });
+    await connection.run();
+    expect(sent.map(parseCodexWireMessage)).toMatchObject([
+      { error: { message: "Not initialized" }, id: 1 },
+      { id: 2, result: {} },
+      { method: "thread/archived", params: { threadId: "thread" } },
+      { error: { message: "Already initialized" }, id: 3 },
+      { id: 4, result: { data: [] } },
+    ]);
   });
 });

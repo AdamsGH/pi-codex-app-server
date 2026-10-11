@@ -46,7 +46,7 @@ The daemon accepts Codex JSON-RPC connections and dials out to the Remote Contro
 ### Prerequisites
 
 - [Node.js](https://nodejs.org) 22.5 or newer. The metadata store uses `node:sqlite`, so Node 24 is the smoother choice and drops the experimental warning.
-- [Bun](https://bun.sh) 1.2 or newer to install dependencies and build.
+- [Bun](https://bun.sh) 1.4 or newer to install dependencies and build with the committed lockfile.
 - [Pi Coding Agent](https://pi.dev) installed and logged in.
 
 > [!IMPORTANT] Pairing with ChatGPT needs Pi's `openai-codex` OAuth login. Run `pi` and sign in to ChatGPT there first. An API key will not do: the enrollment call reads the account id out of the OAuth token's claims.
@@ -154,6 +154,12 @@ Implemented today:
 - Streaming notifications: `thread/started`, `thread/name/updated`, `turn/started`, `turn/completed`, `item/started`, `item/completed`, `item/agentMessage/delta`, `item/reasoning/textDelta`
 
 Two details worth knowing if you are reading the wire. Codex omits the `"jsonrpc":"2.0"` member, so this server adds it only while a message is inside the `json-rpc-2.0` library and strips it before sending. Cancellation is the protocol-level `turn/interrupt` request, not `$/cancelRequest`.
+
+Each connection requires a successful `initialize` before other requests. Repeating it on the same JSON-RPC connection returns `Already initialized`. `capabilities.optOutNotificationMethods` suppresses exact notification names for that connection. Remote Control can recreate the JSON-RPC connection on a newer stream initialization while retaining its sequence and unacknowledged messages.
+
+Remote Control replays unacknowledged output before new events and sends all chunks of a message before later sequences. Partial chunk ACKs retain the remaining chunks. Explicit client closure retires the stream's replay state. Historical Pi system messages are omitted from the client view without changing the session file. Turn completion distinguishes model failures, successful runs, and cancellation, following the [app-server lifecycle](https://learn.chatgpt.com/docs/app-server).
+
+Resuming during a running turn returns its live items and original turn/item IDs, then routes further events to the resumed connection. This also restores text generated between stream recreation and the resume request.
 
 > [!WARNING] Codex-only settings such as sandbox mode and approval policy are accepted and then ignored. Sessions run with Pi's execution semantics, and the server reports Pi's effective state back. It will not invent a security guarantee it cannot enforce. If you rely on Codex sandboxing, this is not a drop-in replacement.
 

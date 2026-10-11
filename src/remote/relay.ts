@@ -69,6 +69,7 @@ interface ChunkAssembly {
 
 interface BufferedServerEnvelope {
   readonly envelope: JsonValue;
+  readonly key: string;
   readonly segmentId?: number;
   readonly seqId: number;
 }
@@ -92,7 +93,9 @@ export class RemoteControlRelay {
   readonly #server: AppServer;
   readonly #stopController = new AbortController();
   readonly #tasks = new Set<Promise<void>>();
+  #outboundWrite: Promise<void> = Promise.resolve();
   #relayTransport?: WebSocketTransport;
+  #outboundReady = false;
   #stopped = false;
   #subscribeCursor?: string;
 
@@ -183,18 +186,26 @@ export class RemoteControlRelay {
       database: this.#server.database,
       endpoints: remoteEndpoints,
     });
+    if (this.#stopped) {
+      return;
+    }
     const relayTransport = new WebSocketTransport(this.#connect(enrollment));
     this.#relayTransport = relayTransport;
-
     try {
       await relayTransport.waitUntilOpen(30_000);
-      await this.#replayOutboundBuffer(relayTransport);
+      const replay = this.#queueOutboundBatch(
+        relayTransport,
+        [...this.#outboundBuffer.values()].flat()
+      );
+      this.#outboundReady = true;
+      await replay;
       for await (const wireMessage of relayTransport.read()) {
         await this.#receive(wireMessage);
       }
     } finally {
       relayTransport.close();
       if (this.#relayTransport === relayTransport) {
+        this.#outboundReady = false;
         this.#relayTransport = undefined;
       }
     }
@@ -301,8 +312,8 @@ export class RemoteControlRelay {
       stream_id: streamId,
       type: "pong",
     };
-    this.#bufferOutbound(key, envelope, sequence);
-    await this.#trySendBufferedEnvelope(envelope);
+    const buffered = this.#bufferOutbound(key, envelope, sequence);
+    await this.#sendBufferedBatch([buffered]);
   }
 
   #receiveClientMessage(envelope: ClientMessageEnvelope): void {
@@ -313,12 +324,8 @@ export class RemoteControlRelay {
     let client = this.#clients.get(key);
 
     if (
-      this.#isDuplicateClientMessage(
-        key,
-        isInitialize,
-        envelope.seq_id,
-        client !== undefined
-      )
+      envelope.seq_id !== undefined &&
+      (this.#lastInboundSequence.get(key) ?? -1) >= envelope.seq_id
     ) {
       this.#logger.info("Dropped duplicate remote message", {
         seq_id: envelope.seq_id,
@@ -357,20 +364,6 @@ export class RemoteControlRelay {
     if (envelope.seq_id !== undefined) {
       this.#lastInboundSequence.set(key, envelope.seq_id);
     }
-  }
-
-  #isDuplicateClientMessage(
-    key: string,
-    isInitialize: boolean,
-    sequence: number | undefined,
-    hasClient: boolean
-  ): boolean {
-    return (
-      sequence !== undefined &&
-      !isInitialize &&
-      hasClient &&
-      (this.#lastInboundSequence.get(key) ?? -1) >= sequence
-    );
   }
 
   #receiveChunk(
@@ -460,7 +453,6 @@ export class RemoteControlRelay {
 
     current?.close();
     this.#clients.delete(key);
-    this.#lastInboundSequence.delete(key);
 
     const assemblyPrefix = `${key}\u0000`;
     for (const assemblyKey of this.#assemblies.keys()) {
@@ -473,15 +465,28 @@ export class RemoteControlRelay {
   #closeClient(clientId: string, streamId?: string): void {
     if (streamId) {
       this.#cleanupStream(clientId, streamId);
+      this.#retireStream(streamKey(clientId, streamId));
       return;
     }
 
-    for (const key of this.#clients.keys()) {
+    const keys = new Set([
+      ...this.#clients.keys(),
+      ...this.#nextSequence.keys(),
+      ...this.#lastInboundSequence.keys(),
+    ]);
+    for (const key of keys) {
       if (key.startsWith(`${clientId}\u0000`)) {
         const streamIdFromKey = key.slice(clientId.length + 1);
         this.#cleanupStream(clientId, streamIdFromKey);
+        this.#retireStream(key);
       }
     }
+  }
+
+  #retireStream(key: string): void {
+    this.#lastInboundSequence.delete(key);
+    this.#nextSequence.delete(key);
+    this.#outboundBuffer.delete(key);
   }
 
   async #sendServerMessage(
@@ -503,8 +508,8 @@ export class RemoteControlRelay {
     };
 
     if (Buffer.byteLength(JSON.stringify(envelope)) <= MAX_SEGMENT_BYTES) {
-      this.#bufferOutbound(key, envelope, sequence);
-      await this.#trySendBufferedEnvelope(envelope);
+      const buffered = this.#bufferOutbound(key, envelope, sequence);
+      await this.#sendBufferedBatch([buffered]);
       return;
     }
 
@@ -524,6 +529,7 @@ export class RemoteControlRelay {
       );
     }
 
+    const batch: BufferedServerEnvelope[] = [];
     for (let segmentId = 0; segmentId < chunks.length; segmentId += 1) {
       const chunkEnvelope = {
         client_id: clientId,
@@ -535,10 +541,9 @@ export class RemoteControlRelay {
         stream_id: streamId,
         type: "server_message_chunk",
       };
-      this.#bufferOutbound(key, chunkEnvelope, sequence, segmentId);
-      // eslint-disable-next-line no-await-in-loop -- Chunks must preserve order and WebSocket backpressure.
-      await this.#trySendBufferedEnvelope(chunkEnvelope);
+      batch.push(this.#bufferOutbound(key, chunkEnvelope, sequence, segmentId));
     }
+    await this.#sendBufferedBatch(batch);
   }
 
   #bufferOutbound(
@@ -546,15 +551,17 @@ export class RemoteControlRelay {
     envelope: JsonValue,
     seqId: number,
     segmentId?: number
-  ): void {
+  ): BufferedServerEnvelope {
     const buffered = this.#outboundBuffer.get(key) ?? [];
-    buffered.push({ envelope, segmentId, seqId });
+    const item = { envelope, key, segmentId, seqId };
+    buffered.push(item);
     this.#outboundBuffer.set(key, buffered);
     if (buffered.length === 512 || buffered.length % 1024 === 0) {
       this.#logger.warn("Remote Control unacked outbound buffer is growing", {
         pending: buffered.length,
       });
     }
+    return item;
   }
 
   #ackOutbound(
@@ -583,35 +590,37 @@ export class RemoteControlRelay {
     }
   }
 
-  async #trySendBufferedEnvelope(envelope: JsonValue): Promise<void> {
-    try {
-      await this.#sendEnvelope(envelope);
-    } catch {
-      // Keep the envelope buffered so the reconnect path can replay it.
-    }
-  }
-
-  async #replayOutboundBuffer(
-    relayTransport: WebSocketTransport
+  async #sendBufferedBatch(
+    batch: readonly BufferedServerEnvelope[]
   ): Promise<void> {
-    const pending = [...this.#outboundBuffer.values()].flat();
-    if (pending.length > 0) {
-      this.#logger.info("Replaying unacked Remote Control envelopes", {
-        pending: pending.length,
-      });
+    const relayTransport = this.#relayTransport;
+    if (!relayTransport || !this.#outboundReady) {
+      return;
     }
-
-    for (const item of pending) {
-      // eslint-disable-next-line no-await-in-loop -- Replay must preserve original server sequence order.
-      await relayTransport.send(JSON.stringify(item.envelope));
-    }
+    await this.#queueOutboundBatch(relayTransport, batch);
   }
 
-  async #sendEnvelope(envelope: JsonValue): Promise<void> {
-    const relayTransport = this.#relayTransport;
-    if (!relayTransport) {
-      throw new Error("Remote Control WebSocket is not connected");
-    }
-    await relayTransport.send(JSON.stringify(envelope));
+  #queueOutboundBatch(
+    relayTransport: WebSocketTransport,
+    batch: readonly BufferedServerEnvelope[]
+  ): Promise<void> {
+    const previous = this.#outboundWrite;
+    const write = async (): Promise<void> => {
+      await previous;
+      try {
+        for (const item of batch) {
+          if (!this.#outboundBuffer.get(item.key)?.includes(item)) {
+            continue;
+          }
+          // eslint-disable-next-line no-await-in-loop -- Replay and complete chunk batches must precede newer sequences.
+          await relayTransport.send(JSON.stringify(item.envelope));
+        }
+      } catch {
+        // Retain unacked envelopes and reconnect before attempting further writes.
+        relayTransport.close();
+      }
+    };
+    this.#outboundWrite = write();
+    return this.#outboundWrite;
   }
 }
