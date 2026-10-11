@@ -4,6 +4,7 @@ import { readFile, rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
+import { getPackageDir } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 
 import type { AppServerConfig } from "../config/app-server-config.js";
@@ -54,12 +55,24 @@ const waitForChildFailure = async (
 };
 
 const startDaemonProcess = (): DaemonLaunch => {
-  const cliPath = fileURLToPath(new URL("../cli.js", import.meta.url));
-  const child = spawn(process.execPath, [cliPath, "daemon"], {
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true,
-  });
+  const cliPath = fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
+  const loaderUrl = new URL(
+    "../../dist/runtime/pi-module-loader.js",
+    import.meta.url
+  );
+  const child = spawn(
+    process.execPath,
+    ["--import", loaderUrl.href, cliPath, "daemon"],
+    {
+      detached: true,
+      env: {
+        ...process.env,
+        PI_CODEX_APP_SERVER_PI_PACKAGE_DIR: getPackageDir(),
+      },
+      stdio: "ignore",
+      windowsHide: true,
+    }
+  );
   if (!child.pid) {
     throw new Error("Codex App Server process did not receive a PID");
   }

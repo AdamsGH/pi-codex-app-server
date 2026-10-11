@@ -17,6 +17,8 @@ const libraryBuild = await Bun.build({
   entrypoints: [
     path.resolve(root, "src/index.ts"),
     path.resolve(root, "src/extension/index.ts"),
+    path.resolve(root, "src/runtime/pi-module-loader.ts"),
+    path.resolve(root, "src/runtime/pi-module-hooks.ts"),
   ],
   naming: "[dir]/[name].[ext]",
   outdir: path.resolve(root, "dist"),

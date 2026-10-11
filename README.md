@@ -61,6 +61,8 @@ pi install npm:pi-codex-app-server
 
 Pin a version with `pi install npm:pi-codex-app-server@0.1.0`, or add `-l` to install into the current project instead of your global Pi setup.
 
+The extension loads from TypeScript so Pi can supply its own runtime modules. Pi packages are wildcard peer dependencies; the development install pins the SDK used by the standalone daemon. When a Pi-managed install omits peers, the daemon resolves missing Pi modules from the host that launched it. A standalone npm install uses npm's peer installation.
+
 Start Pi and the extension takes it from there. It launches the daemon on session start and puts the status in the footer:
 
 ```
