@@ -1,10 +1,60 @@
-import { rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { SessionInfo } from "@earendil-works/pi-coding-agent";
+import { z } from "zod";
 
 import type { MetadataDatabase } from "../storage/metadata-database.js";
 import { PiProjectCatalog } from "./project-catalog.js";
+
+const messageTextSchema = z.union([
+  z.string(),
+  z
+    .array(z.looseObject({ text: z.string().optional(), type: z.string() }))
+    .transform((content) =>
+      content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text ?? "")
+        .join(" ")
+    ),
+]);
+
+const summarizeMessages = (manager: SessionManager) => {
+  let activity = 0;
+  let messageCount = 0;
+  let firstMessage = "";
+  const messages: string[] = [];
+  for (const entry of manager.getEntries()) {
+    if (entry.type !== "message") {
+      continue;
+    }
+    messageCount += 1;
+    const { message } = entry;
+    if (message.role !== "user" && message.role !== "assistant") {
+      continue;
+    }
+    const parsedTimestamp = z.number().safeParse(message.timestamp);
+    const timestamp = parsedTimestamp.success
+      ? parsedTimestamp.data
+      : new Date(entry.timestamp).getTime();
+    if (Number.isFinite(timestamp)) {
+      activity = Math.max(activity, timestamp);
+    }
+    const text = messageTextSchema.parse(message.content);
+    if (text) {
+      messages.push(text);
+      if (!firstMessage && message.role === "user") {
+        firstMessage = text;
+      }
+    }
+  }
+  return {
+    activity,
+    allMessagesText: messages.join(" "),
+    firstMessage: firstMessage || "(no messages)",
+    messageCount,
+  };
+};
 
 export class PiSessionRepository {
   readonly projects: PiProjectCatalog;
@@ -41,8 +91,63 @@ export class PiSessionRepository {
     return thread ? SessionManager.open(thread.sessionFile) : undefined;
   }
 
+  async read(threadId: string): Promise<
+    | {
+        info: SessionInfo;
+        manager: SessionManager;
+      }
+    | undefined
+  > {
+    const manager = await this.load(threadId);
+    const metadata = this.#database.getThread(threadId);
+    if (!(manager && metadata)) {
+      return undefined;
+    }
+    let modified: Date;
+    try {
+      const stats = await stat(metadata.sessionFile);
+      modified = stats.mtime;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        return undefined;
+      }
+      throw error;
+    }
+    const header = manager.getHeader();
+    if (!header || header.id !== threadId) {
+      return undefined;
+    }
+    const created = new Date(header.timestamp);
+    const { activity, ...summary } = summarizeMessages(manager);
+    if (activity > 0) {
+      modified = new Date(activity);
+    } else if (Number.isFinite(created.getTime())) {
+      modified = created;
+    }
+    const info: SessionInfo = {
+      ...summary,
+      created,
+      cwd: manager.getCwd(),
+      id: threadId,
+      modified,
+      name: manager.getSessionName(),
+      parentSessionPath: header.parentSession,
+      path: metadata.sessionFile,
+    };
+    this.#database.upsertThread({ ...metadata, updatedAt: modified.getTime() });
+    return { info, manager };
+  }
+
   async delete(threadId: string): Promise<boolean> {
-    const thread = this.#database.getThread(threadId);
+    let thread = this.#database.getThread(threadId);
+    if (!thread) {
+      await this.list();
+      thread = this.#database.getThread(threadId);
+    }
     if (!thread) {
       return false;
     }

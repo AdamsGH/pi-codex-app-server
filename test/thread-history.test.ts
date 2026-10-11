@@ -141,6 +141,8 @@ describe("Thread history", () => {
       server.register(connection);
       await connection.run();
 
+      expect(sessionRepository.list).not.toHaveBeenCalled();
+
       expect(responses).toHaveLength(3);
       expect(responses[0]).toMatchObject({
         id: 1,

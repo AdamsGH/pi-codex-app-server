@@ -21,7 +21,7 @@ describe("daemon Pi module resolution", () => {
     initialize(hostParentUrl);
   });
 
-  it("keeps the standalone runtime when installed", async () => {
+  it("prefers the launching Pi host over extension development dependencies", async () => {
     const result = { url: "file:///extension/node_modules/pi/index.js" };
     const nextResolve = vi.fn<NextResolve>().mockResolvedValue(result);
     await expect(
@@ -29,7 +29,7 @@ describe("daemon Pi module resolution", () => {
     ).resolves.toBe(result);
     expect(nextResolve).toHaveBeenCalledExactlyOnceWith(
       "@earendil-works/pi-coding-agent",
-      context
+      { ...context, parentURL: hostParentUrl }
     );
   });
 
@@ -40,7 +40,6 @@ describe("daemon Pi module resolution", () => {
           const result = { url: "file:///host/node_modules/pi/index.js" };
           const nextResolve = vi
             .fn<NextResolve>()
-            .mockRejectedValueOnce(missing)
             .mockResolvedValueOnce(result);
           await expect(resolve(specifier, context, nextResolve)).resolves.toBe(
             result

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -355,6 +356,11 @@ export class PiLiveSessionManager {
     return loaded?.active !== undefined || loaded?.session.isStreaming === true;
   }
 
+  unload(threadId: string): void {
+    this.#loaded.get(threadId)?.session.dispose();
+    this.#loaded.delete(threadId);
+  }
+
   async start(params: ThreadStartParams): Promise<ThreadStartResponse> {
     const cwd = path.resolve(params.cwd ?? process.cwd());
     const model = this.#modelCatalog.resolve(params.model);
@@ -596,7 +602,10 @@ export class PiLiveSessionManager {
     session: AgentSession,
     source: ThreadStartParams["threadSource"]
   ): Promise<Thread> {
-    const stored = await this.#threadCatalog.read(session.sessionId, true);
+    const stored =
+      session.sessionFile && existsSync(session.sessionFile)
+        ? await this.#threadCatalog.read(session.sessionId, true)
+        : undefined;
     if (stored) {
       return stored;
     }

@@ -21,6 +21,9 @@ const cursorSchema = z
 const modelKey = (model: PiModel<string>): string =>
   `${encodeURIComponent(model.provider)}/${encodeURIComponent(model.id)}`;
 
+const isChatModel = (model: PiModel<string>): boolean =>
+  !("type" in model) || model.type === "chat";
+
 const decodeModelKey = (
   key: string
 ): { readonly modelId: string; readonly provider: string } | undefined => {
@@ -100,6 +103,17 @@ export class PiModelCatalog {
     this.#modelRuntime = modelRuntime;
   }
 
+  #defaultModel(
+    models: readonly PiModel<string>[]
+  ): PiModel<string> | undefined {
+    const provider = this.#modelRuntime.settings.getDefaultProvider();
+    const id = this.#modelRuntime.settings.getDefaultModel();
+    return (
+      models.find((model) => model.provider === provider && model.id === id) ??
+      models.at(0)
+    );
+  }
+
   async list(
     params: ModelListParams,
     signal?: AbortSignal
@@ -110,8 +124,10 @@ export class PiModelCatalog {
       Math.max(params.limit ?? DEFAULT_PAGE_SIZE, 1),
       MAX_PAGE_SIZE
     );
-    const models = this.#modelRuntime.modelRegistry.getAvailable();
-    const defaultModel = models.at(0);
+    const models = this.#modelRuntime.modelRegistry
+      .getAvailable()
+      .filter(isChatModel);
+    const defaultModel = this.#defaultModel(models);
     const defaultKey = defaultModel ? modelKey(defaultModel) : undefined;
     const page = models.slice(offset, offset + pageSize);
     const nextOffset = offset + page.length;
@@ -132,15 +148,18 @@ export class PiModelCatalog {
 
   resolve(key?: string | null): PiModel<string> | undefined {
     if (!key) {
-      return this.#modelRuntime.modelRegistry.getAvailable().at(0);
+      return this.#defaultModel(
+        this.#modelRuntime.modelRegistry.getAvailable().filter(isChatModel)
+      );
     }
     const identity = decodeModelKey(key);
-    return identity
+    const model = identity
       ? this.#modelRuntime.modelRuntime.getModel(
           identity.provider,
           identity.modelId
         )
       : undefined;
+    return model && isChatModel(model) ? model : undefined;
   }
 
   static key(model: PiModel<string>): string {

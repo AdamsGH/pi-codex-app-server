@@ -116,6 +116,7 @@ const fixture = () => {
     modelRuntime,
     notifications,
     prompt,
+    session,
     sessionManager,
     sessionRepository,
     threadCatalog,
@@ -154,6 +155,131 @@ describe("Pi live turn lifecycle", () => {
     }
     vi.restoreAllMocks();
     mocks.createSession.mockReset();
+  });
+
+  it("starts, reads, resumes, and runs a new thread before Pi persists its history", async () => {
+    const f = fixture();
+    const model = {
+      api: "openai-responses",
+      baseUrl: "https://example.invalid",
+      contextWindow: 1000,
+      cost: { cacheRead: 0, cacheWrite: 0, input: 0, output: 0 },
+      id: "test",
+      input: ["text"],
+      maxTokens: 1000,
+      name: "Test",
+      provider: "test",
+      reasoning: false,
+    } as const;
+    vi.spyOn(f.modelCatalog, "resolve").mockReturnValue({
+      ...model,
+      input: ["text"],
+    });
+    Object.defineProperties(f.session, {
+      dispose: { value: vi.fn<AgentSession["dispose"]>() },
+      model: { value: model },
+      sessionFile: { value: undefined },
+      sessionId: { value: f.sessionManager.getSessionId() },
+      thinkingLevel: { value: "off" },
+    });
+    const server = new AppServer({
+      config: {
+        autoStart: false,
+        hostName: "test",
+        listenUrl: new URL("ws://127.0.0.1:0"),
+        paths: {
+          database: ":memory:",
+          endpoint: "/synthetic/endpoint.json",
+          home: "/synthetic",
+          logs: "/synthetic/logs",
+        },
+        piAgentDir: "/synthetic",
+        remoteControl: {
+          baseUrl: new URL("https://example.invalid"),
+          enabled: false,
+        },
+      },
+      database: f.database,
+      liveSessionManager: f.manager,
+      modelCatalog: f.modelCatalog,
+      modelRuntime: f.modelRuntime,
+      sessionRepository: f.sessionRepository,
+      threadCatalog: f.threadCatalog,
+    });
+    const output: ReturnType<typeof parseCodexWireMessage>[] = [];
+    const threadId = f.sessionManager.getSessionId();
+    const connection = new JsonRpcConnection({
+      clientId: "new-thread",
+      logger: appServerLogger,
+      transport: {
+        close: () => {},
+        read: async function* read() {
+          yield JSON.stringify({
+            id: 0,
+            method: "initialize",
+            params: { clientInfo: { name: "test", version: "1" } },
+          });
+          yield JSON.stringify({
+            id: 1,
+            method: "thread/start",
+            params: { cwd: "/synthetic", ephemeral: true },
+          });
+          yield JSON.stringify({
+            id: 2,
+            method: "thread/read",
+            params: { includeTurns: true, threadId },
+          });
+          yield JSON.stringify({
+            id: 3,
+            method: "thread/resume",
+            params: { threadId },
+          });
+          yield JSON.stringify({
+            id: 4,
+            method: "turn/start",
+            params: {
+              input: [{ text: "hello", text_elements: [], type: "text" }],
+              threadId,
+            },
+          });
+          f.completion.resolve();
+          await vi.waitFor(() =>
+            expect(output).toContainEqual(
+              expect.objectContaining({ method: "turn/completed" })
+            )
+          );
+          yield JSON.stringify({
+            id: 5,
+            method: "thread/delete",
+            params: { threadId },
+          });
+          yield JSON.stringify({
+            id: 6,
+            method: "thread/loaded/list",
+            params: {},
+          });
+        },
+        send: (message) => {
+          output.push(parseCodexWireMessage(message));
+          return Promise.resolve();
+        },
+      },
+    });
+    server.register(connection);
+    await connection.run();
+    for (const id of [1, 2, 3, 4, 5]) {
+      expect(output).toContainEqual(
+        expect.objectContaining({ id, result: expect.anything() })
+      );
+    }
+    expect(output).toContainEqual({
+      id: 6,
+      result: { data: [], nextCursor: null },
+    });
+    expect(f.prompt).toHaveBeenCalledExactlyOnceWith("hello", {
+      images: [],
+      source: "rpc",
+    });
   });
 
   it("reports prompt rejection as failed with its error", async () => {

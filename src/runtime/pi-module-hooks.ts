@@ -13,26 +13,19 @@ const hostPackages = [
   "@earendil-works/pi-tui",
 ];
 
-// Pi-managed installs omit peers. The separate daemon can resolve them from
-// its launching host without installing another runtime into the extension.
+// Use the launching host's SDK even when extension development dependencies
+// are installed. Mixing versions changes model and session contracts.
 export const resolve: ResolveHook = async (specifier, context, nextResolve) => {
-  try {
-    return await nextResolve(specifier, context);
-  } catch (error) {
-    const isHostPackage = hostPackages.some(
-      (name) => specifier === name || specifier.startsWith(`${name}/`)
-    );
-    if (
-      !isHostPackage ||
-      !(error instanceof Error) ||
-      !("code" in error) ||
-      error.code !== "ERR_MODULE_NOT_FOUND"
-    ) {
-      throw error;
-    }
-    return await nextResolve(specifier, {
-      ...context,
-      parentURL: hostParentUrl,
-    });
-  }
+  const isHostPackage = hostPackages.some(
+    (name) => specifier === name || specifier.startsWith(`${name}/`)
+  );
+  return await nextResolve(
+    specifier,
+    isHostPackage
+      ? {
+          ...context,
+          parentURL: hostParentUrl,
+        }
+      : context
+  );
 };

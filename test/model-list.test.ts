@@ -2,7 +2,8 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import type { AppServerConfig } from "../src/config/app-server-config.js";
@@ -164,6 +165,62 @@ describe("model/list", () => {
     expect(modelIds).not.toContain(
       `${UNCONFIGURED_PROVIDER}/unconfigured-model`
     );
+  });
+
+  it("uses Pi settings for the default model", async () => {
+    const config = await createTestConfig();
+    await writeFile(
+      path.join(config.piAgentDir, "settings.json"),
+      JSON.stringify({
+        defaultModel: "configured-model",
+        defaultProvider: CONFIGURED_PROVIDER,
+      })
+    );
+    const appServer = await createAppServer(config);
+    try {
+      const models = await requestModels(appServer, "default-model-test");
+      expect(models).toContainEqual(
+        expect.objectContaining({
+          id: `${CONFIGURED_PROVIDER}/configured-model`,
+          isDefault: true,
+        })
+      );
+    } finally {
+      appServer.close();
+    }
+  });
+
+  it("excludes image catalogs from chat model listing", async () => {
+    const original = ModelRuntime.prototype.getAvailableSnapshot;
+    const image = {
+      api: "openrouter-images",
+      id: "image-generator",
+      input: ["text"],
+      name: "Image Generator",
+      provider: CONFIGURED_PROVIDER,
+      type: "image",
+    };
+    vi.spyOn(ModelRuntime.prototype, "getAvailableSnapshot").mockImplementation(
+      function snapshot(this: ModelRuntime) {
+        const models = [...original.call(this)];
+        return Object.assign(models, { [models.length]: image });
+      }
+    );
+    const appServer = await createAppServer(await createTestConfig());
+    try {
+      const models = await requestModels(appServer, "image-catalog-test");
+      expect(models).toContainEqual(
+        expect.objectContaining({
+          id: `${CONFIGURED_PROVIDER}/configured-model`,
+        })
+      );
+      expect(models.map(({ id }) => id)).not.toContain(
+        `${CONFIGURED_PROVIDER}/image-generator`
+      );
+    } finally {
+      appServer.close();
+      vi.restoreAllMocks();
+    }
   });
 
   it("reloads provider additions and removals without restarting", async () => {

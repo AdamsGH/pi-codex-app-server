@@ -180,15 +180,17 @@ export class PiThreadCatalog {
     threadId: string,
     includeTurns = false
   ): Promise<Thread | undefined> {
-    const all = await this.#sessionRepository.list();
-    const sessions = this.publication
-      ? await this.publication.select(all)
-      : all;
-    const session = sessions.find(({ id }) => id === threadId);
-    if (!session) {
+    const loaded = await this.#sessionRepository.read(threadId);
+    if (!loaded) {
       return undefined;
     }
-    const sessionManager = await this.#sessionRepository.load(threadId);
+    const { info: session, manager: sessionManager } = loaded;
+    const published = this.publication
+      ? await this.publication.select([session])
+      : [session];
+    if (published.length === 0) {
+      return undefined;
+    }
     const sessionContext = sessionManager?.buildSessionContext();
     const thread = projectThread(
       session,

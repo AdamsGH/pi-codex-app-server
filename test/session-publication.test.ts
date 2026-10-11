@@ -83,9 +83,16 @@ describe("Session publication", () => {
     const list = vi
       .spyOn(SessionManager, "listAll")
       .mockResolvedValue([f.session("rpc-thread", 1000)]);
-    const open = vi
-      .spyOn(SessionManager, "open")
-      .mockReturnValue(SessionManager.inMemory(f.cwd));
+    await writeFile(
+      f.session("rpc-thread").path,
+      JSON.stringify({
+        cwd: f.cwd,
+        id: "rpc-thread",
+        timestamp: new Date(0).toISOString(),
+        type: "session",
+        version: 3,
+      })
+    );
     const server = await createAppServer({
       autoStart: false,
       hostName: "test",
@@ -167,7 +174,6 @@ describe("Session publication", () => {
     } finally {
       server.close();
       list.mockRestore();
-      open.mockRestore();
       await presence.stop();
       await f.close();
     }

@@ -1,6 +1,10 @@
 import path from "node:path";
 
-import { ModelRegistry, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import {
+  ModelRegistry,
+  ModelRuntime,
+  SettingsManager,
+} from "@earendil-works/pi-coding-agent";
 
 import type { GetAuthStatusParams } from "../../vendor/openai-codex-app-server-protocol/typescript/GetAuthStatusParams.js";
 import type { GetAuthStatusResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/GetAuthStatusResponse.js";
@@ -11,10 +15,12 @@ export const OPENAI_CODEX_PROVIDER = "openai-codex";
 export class PiModelRuntime {
   readonly modelRegistry: ModelRegistry;
   readonly modelRuntime: ModelRuntime;
+  readonly settings: SettingsManager;
 
-  private constructor(modelRuntime: ModelRuntime) {
+  private constructor(modelRuntime: ModelRuntime, settings: SettingsManager) {
     this.modelRuntime = modelRuntime;
     this.modelRegistry = new ModelRegistry(modelRuntime);
+    this.settings = settings;
   }
 
   static async create(config: AppServerConfig): Promise<PiModelRuntime> {
@@ -24,7 +30,10 @@ export class PiModelRuntime {
       modelsPath: path.join(config.piAgentDir, "models.json"),
       refreshOnCreate: true,
     });
-    return new PiModelRuntime(modelRuntime);
+    return new PiModelRuntime(
+      modelRuntime,
+      SettingsManager.create(process.cwd(), config.piAgentDir)
+    );
   }
 
   hasOpenAiAuthentication(): boolean {
@@ -55,6 +64,7 @@ export class PiModelRuntime {
   }
 
   async refreshModels(signal?: AbortSignal): Promise<void> {
+    await this.settings.reload();
     await this.modelRuntime.refresh({ allowNetwork: false, signal });
   }
 

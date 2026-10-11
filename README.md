@@ -10,7 +10,7 @@ This is an adapter, not a Codex reimplementation. Pi still picks the models, run
 
 - **Two transports.** Run it over stdio for a local Codex client, or as a background daemon on a WebSocket port that survives Pi session changes and extension reloads.
 - **Connected host for ChatGPT.** Enroll with OpenAI Remote Control, show a QR code in the Pi TUI, and drive your machine from the ChatGPT iOS app.
-- **Every Pi model.** `model/list` returns Pi's whole model registry, including non-OpenAI providers, with the reasoning levels each model actually supports. Selections pass through to Pi without rewriting or silent fallback.
+- **Pi chat models.** `model/list` returns available chat models from all Pi providers, with their supported reasoning levels. Image and classifier catalogs do not appear in the chat selector. The default follows Pi's model settings; explicit selections pass through without rewriting or silent fallback.
 - **Pi history, projected on demand.** Pi's JSONL sessions stay the source of truth. Threads, turns, and items are computed from them when a client asks.
 - **One credential.** Pi owns the OpenAI OAuth token. This server borrows it and routes logout back through Pi, so two stores never rotate the same refresh token.
 - **No `Method not found`.** Codex methods without a Pi equivalent return schema-valid neutral results, validated by Ajv against the official Codex JSON Schemas.
@@ -61,7 +61,7 @@ pi install npm:pi-codex-app-server
 
 Pin a version with `pi install npm:pi-codex-app-server@0.1.0`, or add `-l` to install into the current project instead of your global Pi setup.
 
-The extension loads from TypeScript so Pi can supply its own runtime modules. Pi packages are wildcard peer dependencies; the development install pins the SDK used by the standalone daemon. When a Pi-managed install omits peers, the daemon resolves missing Pi modules from the host that launched it. A standalone npm install uses npm's peer installation.
+The extension loads from TypeScript so Pi can supply its own runtime modules. Pi packages are wildcard peer dependencies. A daemon launched by the extension uses that Pi installation's SDK, including when local development dependencies are installed. A standalone npm install uses npm's peer installation.
 
 Start Pi and the extension takes it from there. It launches the daemon on session start and puts the status in the footer:
 

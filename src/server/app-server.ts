@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { platform } from "node:os";
 import path from "node:path";
 
@@ -6,6 +7,7 @@ import type { InitializeResponse } from "../../vendor/openai-codex-app-server-pr
 import type { GetAccountResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/GetAccountResponse.js";
 import type { ModelProviderCapabilitiesReadResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ModelProviderCapabilitiesReadResponse.js";
 import type { ThreadStartParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadStartParams.js";
+import type { ThreadStartResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadStartResponse.js";
 import type { TurnInterruptParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnInterruptParams.js";
 import type { TurnStartParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnStartParams.js";
 import { codexAppServerUserAgent } from "../codex-app-server-identity.js";
@@ -47,6 +49,7 @@ export class AppServer {
   readonly #sessionRepository: PiSessionRepository;
   readonly #threadCatalog: PiThreadCatalog;
   readonly #publicationClients = new Map<JsonRpcConnection, Set<string>>();
+  readonly #newThreads = new Map<string, ThreadStartResponse>();
   #publicationTimer?: ReturnType<typeof setInterval>;
   #refreshing = false;
   #closed = false;
@@ -73,6 +76,7 @@ export class AppServer {
     this.#closed = true;
     clearInterval(this.#publicationTimer);
     this.#publicationClients.clear();
+    this.#newThreads.clear();
     this.#liveSessionManager.close();
     this.#database.close();
   }
@@ -207,10 +211,11 @@ export class AppServer {
       },
       context: { signal: AbortSignal }
     ) => {
-      const thread = await this.#threadCatalog.read(
-        params.threadId,
-        params.includeTurns
-      );
+      const pending = await this.#unpersistedThread(params.threadId);
+      const stored = pending
+        ? undefined
+        : await this.#threadCatalog.read(params.threadId, params.includeTurns);
+      const thread = stored ?? pending?.thread;
       if (!thread) {
         throw new Error(`Thread not found: ${params.threadId}`);
       }
@@ -220,7 +225,7 @@ export class AppServer {
           context.signal
         );
       }
-      return { thread };
+      return { thread: this.#liveSessionManager.withActiveTurn(thread) };
     };
     connection.registerRequest("thread/read", readThread);
 
@@ -232,6 +237,7 @@ export class AppServer {
         path.resolve(params.cwd ?? process.cwd())
       );
       const threadStartResponse = await this.#liveSessionManager.start(params);
+      this.#newThreads.set(threadStartResponse.thread.id, threadStartResponse);
       this.#threadCatalog.publication?.retain(
         threadStartResponse.thread.id,
         context.signal
@@ -247,6 +253,21 @@ export class AppServer {
       params: { readonly threadId: string },
       context: { signal: AbortSignal }
     ) => {
+      const pending = await this.#unpersistedThread(params.threadId);
+      if (pending) {
+        this.#threadCatalog.publication?.retain(
+          params.threadId,
+          context.signal
+        );
+        this.#liveSessionManager.rebindConnection(params.threadId, connection);
+        return {
+          ...pending,
+          initialTurnsPage: null,
+          itemsBackwardsCursor: null,
+          thread: this.#liveSessionManager.withActiveTurn(pending.thread),
+          turnsBackwardsCursor: null,
+        };
+      }
       const sessionManager = await this.#sessionRepository.load(
         params.threadId
       );
@@ -324,7 +345,10 @@ export class AppServer {
       params: TurnStartParams,
       context: { signal: AbortSignal }
     ) => {
-      if (!(await this.#threadCatalog.read(params.threadId))) {
+      if (
+        !(await this.#unpersistedThread(params.threadId)) &&
+        !(await this.#threadCatalog.read(params.threadId))
+      ) {
         throw new Error(`Thread not published: ${params.threadId}`);
       }
       this.#threadCatalog.publication?.retain(params.threadId, context.signal);
@@ -368,12 +392,38 @@ export class AppServer {
     const deleteThread = async (params: {
       readonly threadId: string;
     }): Promise<Record<string, never>> => {
-      if (!(await this.#sessionRepository.delete(params.threadId))) {
+      if (this.#liveSessionManager.isWorking(params.threadId)) {
+        throw new Error(`Thread is already running: ${params.threadId}`);
+      }
+      if (
+        !(await this.#unpersistedThread(params.threadId)) &&
+        !(await this.#sessionRepository.delete(params.threadId))
+      ) {
         throw new Error(`Thread not found: ${params.threadId}`);
       }
+      this.#liveSessionManager.unload(params.threadId);
+      this.#newThreads.delete(params.threadId);
       return {};
     };
     connection.registerRequest("thread/delete", deleteThread);
+  }
+
+  async #unpersistedThread(
+    id: string
+  ): Promise<ThreadStartResponse | undefined> {
+    const pending = this.#newThreads.get(id);
+    if (!pending) {
+      return undefined;
+    }
+    if (
+      pending.thread.path &&
+      (existsSync(pending.thread.path) || this.#database.getThread(id))
+    ) {
+      this.#newThreads.delete(id);
+      return undefined;
+    }
+    await this.#threadCatalog.publication?.assertCanStart(pending.cwd);
+    return pending;
   }
 
   #trackPublication(connection: JsonRpcConnection, signal: AbortSignal): void {
