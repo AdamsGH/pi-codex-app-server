@@ -121,6 +121,8 @@ Logs go to stderr as JSON Lines. Email addresses and JWTs are redacted on the wa
 
 ## Sidebar organization
 
+[Session publication settings](docs/session-export.md) control history age and `all`, `active`, or `off` modes independently for project and unassigned sessions. Configure them in Pi's global or project `settings.json`. Defaults publish all sessions.
+
 Repository sessions share projects by Git root. Other sessions use the Pi section. Projects, section membership, and manual moves persist across daemon restarts. Codex desktop also needs its saved remote-project catalog populated. Use the reusable [sidebar sync script](docs/sidebar-sync.md) to preview, import, or restore that state.
 
 ```powershell

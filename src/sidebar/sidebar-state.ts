@@ -331,6 +331,55 @@ const orderSectionItems = (
   ];
 };
 
+const withdrawUnpublished = (
+  state: SidebarState,
+  account: SidebarAccount,
+  snapshot: SidebarSnapshot,
+  hostId: string
+): number => {
+  const published = new Set(snapshot.threads.map(({ id }) => id));
+  const owned = new Set([
+    ...Object.entries(account.threadHostIds)
+      .filter(([, host]) => host === hostId)
+      .map(([id]) => id),
+    ...Object.entries(state["thread-project-membership-host-ids"])
+      .filter(([, host]) => host === hostId)
+      .map(([id]) => id),
+    ...Object.entries(state["thread-project-assignments"])
+      .filter(([, assignment]) => assignment.hostId === hostId)
+      .map(([id]) => id),
+  ]);
+  const withdrawn = new Set([...owned].filter((id) => !published.has(id)));
+  const keys = new Set<string>();
+  for (const id of withdrawn) {
+    const hosts = [
+      account.threadHostIds[id],
+      state["thread-project-membership-host-ids"][id],
+      state["thread-project-assignments"][id]?.hostId,
+    ];
+    if (hosts.some((host) => host && host !== hostId)) {
+      throw new Error(
+        `Cannot withdraw a thread with conflicting ownership: ${id}`
+      );
+    }
+    keys.add(`codex:thread:local:${id}`);
+    keys.add(`codex:thread:${hostId}:${id}`);
+    Reflect.deleteProperty(account.threadHostIds, id);
+    Reflect.deleteProperty(state["thread-project-membership-host-ids"], id);
+    Reflect.deleteProperty(state["thread-project-assignments"], id);
+  }
+  for (const section of account.sections) {
+    section.itemKeys = section.itemKeys.filter((key) => !keys.has(key));
+  }
+  state["pinned-thread-ids"] = state["pinned-thread-ids"].filter(
+    (id) => !withdrawn.has(id)
+  );
+  state["projectless-thread-ids"] = state["projectless-thread-ids"].filter(
+    (id) => !withdrawn.has(id)
+  );
+  return withdrawn.size;
+};
+
 const placeItems = (
   state: SidebarState,
   account: SidebarAccount,
@@ -402,6 +451,12 @@ export const planSidebarImport = (
   }
   const state = sidebarStateSchema.parse(input);
   const { accountId, account, section } = destination(state, snapshot, options);
+  const withdrawnThreads = withdrawUnpublished(
+    state,
+    account,
+    snapshot,
+    options.hostId
+  );
   const { projectIds, createdProjects } = registerProjects(
     state,
     snapshot,
@@ -431,5 +486,6 @@ export const planSidebarImport = (
     projectCount: projectIds.size,
     sectionId: section.id,
     state,
+    withdrawnThreads,
   };
 };

@@ -11,6 +11,44 @@ import { PiThreadSections } from "../src/pi/thread-sections.js";
 import { MetadataDatabase } from "../src/storage/metadata-database.js";
 
 describe("Sidebar organization", () => {
+  test("automatic Pi section ordering follows activity instead of stale positions", async () => {
+    const database = new MetadataDatabase(":memory:");
+    try {
+      const repository = new PiSessionRepository(database);
+      const sessions = [
+        { id: "z-old", modified: new Date(10_000) },
+        { id: "a-new", modified: new Date(40_000) },
+      ].map(({ id, modified }) => ({
+        allMessagesText: id,
+        created: new Date(0),
+        cwd: tmpdir(),
+        firstMessage: id,
+        id,
+        messageCount: 1,
+        modified,
+        path: `${id}.jsonl`,
+      }));
+      vi.spyOn(repository, "list").mockResolvedValue(sessions);
+      for (const session of sessions) {
+        database.upsertThread({
+          archived: false,
+          projectId: null,
+          sessionFile: session.path,
+          threadId: session.id,
+          updatedAt: session.modified.getTime(),
+        });
+      }
+      const catalog = new PiThreadCatalog({
+        database,
+        sessionRepository: repository,
+      });
+      const page = await catalog.list({ sortKey: "section_position" });
+      expect(page.data.map(({ id }) => id)).toStrictEqual(["a-new", "z-old"]);
+    } finally {
+      database.close();
+    }
+  });
+
   test("section moves persist, respect explicit unassignment, and order within the destination", () => {
     const database = new MetadataDatabase(":memory:");
     try {

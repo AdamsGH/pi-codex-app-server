@@ -71,6 +71,8 @@ Version 2 snapshots contain project roots, names, session IDs, project assignmen
 
 The default endpoint respects `PI_CODEX_APP_SERVER_HOME` and `PI_CODING_AGENT_DIR`. `--help` lists each command's options.
 
+The snapshot includes only sessions allowed by [Pi session publication settings](session-export.md). Apply withdraws saved session references owned by the selected host when they are absent from the full snapshot. Export a fresh snapshot after policy changes; the plan reports the withdrawal count. Pi history and session files are not changed.
+
 Existing projects are matched by host and normalized root. Windows roots ignore case and slash direction; Unix roots retain case. Existing project IDs and labels are preserved. In the destination section, projects appear before individual chats and retain their relative order. Imported chats are ordered by last activity, newest first. Equal timestamps retain their previous order. Chats outside the snapshot keep their slots among the individual chats. Repeating an import produces the same state. Importing additional repositories adds entries without deleting unrelated projects.
 
 Custom sections retain an explicit desktop item order. Changing the global chat sorting preference does not repair that saved order. The import refreshes it from source activity timestamps; it does not continuously reorder an open desktop app.

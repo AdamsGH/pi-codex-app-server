@@ -9,6 +9,7 @@ import { createAppServer } from "./create-app-server.js";
 export const runStdioAppServer = async (
   config: AppServerConfig
 ): Promise<void> => {
+  process.env.PI_CODEX_APP_SERVER_INTERNAL = String(process.pid);
   const appServer = await createAppServer(config);
   const stdioTransport = new StdioTransport();
   const connection = new JsonRpcConnection({

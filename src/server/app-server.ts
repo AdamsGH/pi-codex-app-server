@@ -1,4 +1,5 @@
 import { platform } from "node:os";
+import path from "node:path";
 
 import type { InitializeParams } from "../../vendor/openai-codex-app-server-protocol/typescript/InitializeParams.js";
 import type { InitializeResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/InitializeResponse.js";
@@ -9,6 +10,7 @@ import type { TurnInterruptParams } from "../../vendor/openai-codex-app-server-p
 import type { TurnStartParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnStartParams.js";
 import { codexAppServerUserAgent } from "../codex-app-server-identity.js";
 import type { AppServerConfig } from "../config/app-server-config.js";
+import { appServerLogger } from "../logging/app-server-logger.js";
 import type { PiLiveSessionManager } from "../pi/live-session-manager.js";
 import type { PiModelCatalog } from "../pi/model-catalog.js";
 import type { PiModelRuntime } from "../pi/pi-model-runtime.js";
@@ -44,6 +46,10 @@ export class AppServer {
   readonly #modelRuntime: PiModelRuntime;
   readonly #sessionRepository: PiSessionRepository;
   readonly #threadCatalog: PiThreadCatalog;
+  readonly #publicationClients = new Map<JsonRpcConnection, Set<string>>();
+  #publicationTimer?: ReturnType<typeof setInterval>;
+  #refreshing = false;
+  #closed = false;
 
   constructor(options: {
     readonly config: AppServerConfig;
@@ -64,6 +70,9 @@ export class AppServer {
   }
 
   close(): void {
+    this.#closed = true;
+    clearInterval(this.#publicationTimer);
+    this.#publicationClients.clear();
     this.#liveSessionManager.close();
     this.#database.close();
   }
@@ -77,6 +86,12 @@ export class AppServer {
   }
 
   register(connection: JsonRpcConnection): void {
+    if (this.#threadCatalog.publication) {
+      connection.registerInitialized(async ({ signal }) => {
+        this.#trackPublication(connection, signal);
+        await this.#refreshPublication();
+      });
+    }
     connection.registerCompatibilityFallbacks();
     registerNeutralCompatibilityResponses(connection);
     const { sections } = this.#threadCatalog;
@@ -136,7 +151,11 @@ export class AppServer {
       return { thread };
     });
 
-    const initialize = (_params: InitializeParams): InitializeResponse => {
+    const initialize = (
+      _params: InitializeParams,
+      context: { signal: AbortSignal }
+    ): InitializeResponse => {
+      this.#trackPublication(connection, context.signal);
       const response: InitializeResponse = {
         codexHome: this.#config.paths.home,
         platformFamily: platform() === "win32" ? "windows" : "unix",
@@ -181,10 +200,13 @@ export class AppServer {
     const listThreads = this.#threadCatalog.list.bind(this.#threadCatalog);
     connection.registerRequest("thread/list", listThreads);
 
-    const readThread = async (params: {
-      readonly includeTurns?: boolean;
-      readonly threadId: string;
-    }) => {
+    const readThread = async (
+      params: {
+        readonly includeTurns?: boolean;
+        readonly threadId: string;
+      },
+      context: { signal: AbortSignal }
+    ) => {
       const thread = await this.#threadCatalog.read(
         params.threadId,
         params.includeTurns
@@ -192,12 +214,28 @@ export class AppServer {
       if (!thread) {
         throw new Error(`Thread not found: ${params.threadId}`);
       }
+      if (params.includeTurns) {
+        this.#threadCatalog.publication?.retain(
+          params.threadId,
+          context.signal
+        );
+      }
       return { thread };
     };
     connection.registerRequest("thread/read", readThread);
 
-    const startThread = async (params: ThreadStartParams) => {
+    const startThread = async (
+      params: ThreadStartParams,
+      context: { signal: AbortSignal }
+    ) => {
+      await this.#threadCatalog.publication?.assertCanStart(
+        path.resolve(params.cwd ?? process.cwd())
+      );
       const threadStartResponse = await this.#liveSessionManager.start(params);
+      this.#threadCatalog.publication?.retain(
+        threadStartResponse.thread.id,
+        context.signal
+      );
       connection.notify("thread/started", {
         thread: threadStartResponse.thread,
       });
@@ -205,7 +243,10 @@ export class AppServer {
     };
     connection.registerRequest("thread/start", startThread);
 
-    const resumeThread = async (params: { readonly threadId: string }) => {
+    const resumeThread = async (
+      params: { readonly threadId: string },
+      context: { signal: AbortSignal }
+    ) => {
       const sessionManager = await this.#sessionRepository.load(
         params.threadId
       );
@@ -213,6 +254,7 @@ export class AppServer {
       if (!(sessionManager && thread)) {
         throw new Error(`Thread not found: ${params.threadId}`);
       }
+      this.#threadCatalog.publication?.retain(params.threadId, context.signal);
       this.#liveSessionManager.rebindConnection(params.threadId, connection);
       const sessionContext = sessionManager.buildSessionContext();
       const provider = sessionContext.model?.provider ?? "pi";
@@ -269,13 +311,27 @@ export class AppServer {
     };
     connection.registerRequest("thread/compact/start", compactThread);
 
-    connection.registerRequest("thread/unsubscribe", () => ({
-      status: "notSubscribed",
+    connection.registerRequest("thread/unsubscribe", (params, context) => ({
+      status: this.#threadCatalog.publication?.release(
+        params.threadId,
+        context.signal
+      )
+        ? "unsubscribed"
+        : "notSubscribed",
     }));
 
-    const startTurn = async (params: TurnStartParams) => ({
-      turn: await this.#liveSessionManager.startTurn(params, connection),
-    });
+    const startTurn = async (
+      params: TurnStartParams,
+      context: { signal: AbortSignal }
+    ) => {
+      if (!(await this.#threadCatalog.read(params.threadId))) {
+        throw new Error(`Thread not published: ${params.threadId}`);
+      }
+      this.#threadCatalog.publication?.retain(params.threadId, context.signal);
+      return {
+        turn: await this.#liveSessionManager.startTurn(params, connection),
+      };
+    };
     connection.registerRequest("turn/start", startTurn);
 
     const steerTurn = this.#liveSessionManager.steer.bind(
@@ -318,5 +374,89 @@ export class AppServer {
       return {};
     };
     connection.registerRequest("thread/delete", deleteThread);
+  }
+
+  #trackPublication(connection: JsonRpcConnection, signal: AbortSignal): void {
+    if (
+      !this.#threadCatalog.publication ||
+      signal.aborted ||
+      this.#publicationClients.has(connection)
+    ) {
+      return;
+    }
+    this.#publicationClients.set(
+      connection,
+      new Set(this.#database.listThreads().map(({ threadId }) => threadId))
+    );
+    signal.addEventListener(
+      "abort",
+      () => {
+        this.#publicationClients.delete(connection);
+        if (this.#publicationClients.size === 0) {
+          clearInterval(this.#publicationTimer);
+          this.#publicationTimer = undefined;
+        }
+      },
+      { once: true }
+    );
+    this.#publicationTimer ??= setInterval(async () => {
+      try {
+        await this.#refreshPublication();
+      } catch (error) {
+        appServerLogger.warn(
+          error instanceof Error
+            ? error
+            : new Error("Session publication refresh failed")
+        );
+      }
+    }, 5000);
+    this.#publicationTimer.unref();
+  }
+
+  async #refreshPublication(): Promise<void> {
+    if (this.#refreshing || this.#closed) {
+      return;
+    }
+    this.#refreshing = true;
+    try {
+      const all = await this.#sessionRepository.list();
+      let visible = all;
+      try {
+        visible = (await this.#threadCatalog.publication?.select(all)) ?? all;
+      } catch (error) {
+        appServerLogger.warn(
+          error instanceof Error
+            ? error
+            : new Error("Invalid session publication settings")
+        );
+        visible = [];
+      }
+      if (this.#closed) {
+        return;
+      }
+      const current = new Set(visible.map(({ id }) => id));
+      for (const [connection, previous] of this.#publicationClients) {
+        for (const threadId of previous) {
+          if (!current.has(threadId)) {
+            connection.notify("thread/deleted", { threadId });
+          }
+        }
+        for (const threadId of current) {
+          if (!previous.has(threadId)) {
+            const session = visible.find(({ id }) => id === threadId);
+            if (session) {
+              const thread = this.#threadCatalog.describe(session);
+              connection.notify("thread/started", { thread });
+              if (this.#database.getThread(threadId)?.archived) {
+                connection.notify("thread/archived", { threadId });
+              }
+            }
+          }
+        }
+        this.#publicationClients.set(connection, current);
+      }
+    } finally {
+      this.#refreshing = false;
+    }
   }
 }

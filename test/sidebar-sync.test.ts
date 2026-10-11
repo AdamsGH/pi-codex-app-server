@@ -68,6 +68,37 @@ const state = () =>
   });
 
 describe("Sidebar import", () => {
+  test("withdraws unpublished host sessions without touching other hosts or source history", () => {
+    const original = state();
+    original["thread-project-assignments"]["repo-thread"] = {
+      hostId: options.hostId,
+      projectId: "saved-project",
+      projectKind: "remote",
+    };
+    const plan = planSidebarImport(
+      original,
+      { ...snapshot, threads: [] },
+      options
+    );
+    expect(plan.withdrawnThreads).toBe(2);
+    expect(plan.state["pinned-thread-ids"]).toStrictEqual(["other-thread"]);
+    expect(plan.state["thread-project-assignments"]).toStrictEqual({});
+    expect({
+      remoteProjects: plan.state["remote-projects"],
+      threadHosts:
+        plan.state["electron-persisted-atom-state"][
+          "sidebar-custom-sections-v3"
+        ].account?.threadHostIds,
+    }).toStrictEqual({
+      remoteProjects: original["remote-projects"],
+      threadHosts: {},
+    });
+    expect(
+      planSidebarImport(plan.state, { ...snapshot, threads: [] }, options)
+        .withdrawnThreads
+    ).toBe(0);
+  });
+
   test("sorts imported chats by last activity instead of preserving stale section positions", () => {
     const original = state();
     const section =

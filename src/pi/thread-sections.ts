@@ -83,8 +83,14 @@ export class PiThreadSections {
     const state = this.#load();
     const membership = state.threads[threadId];
     const sectionId = this.#sectionId(state, threadId);
+    const automatic =
+      state.defaultSectionId !== null &&
+      sectionId === state.defaultSectionId &&
+      (membership?.enteredAt ?? null) === null;
     return {
-      position: membership?.position ?? 0,
+      position: automatic
+        ? (this.#database.getThread(threadId)?.updatedAt ?? 0)
+        : (membership?.position ?? 0),
       section: state.sections.find(({ id }) => id === sectionId) ?? null,
       sectionEnteredAt: membership?.enteredAt ?? null,
     };

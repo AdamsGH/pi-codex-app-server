@@ -66,7 +66,7 @@ const applySnapshot = async (
     sectionName: options.section,
   });
   process.stdout.write(
-    `${JSON.stringify({ accountId: plan.accountId, assignedThreads: plan.assignedThreads, createdProjects: plan.createdProjects, dryRun: options.dryRun, hostId, projectCount: plan.projectCount, section: options.section, statePath }, null, 2)}\n`
+    `${JSON.stringify({ accountId: plan.accountId, assignedThreads: plan.assignedThreads, createdProjects: plan.createdProjects, dryRun: options.dryRun, hostId, projectCount: plan.projectCount, section: options.section, statePath, withdrawnThreads: plan.withdrawnThreads }, null, 2)}\n`
   );
   if (options.dryRun) {
     return;

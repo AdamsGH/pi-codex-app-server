@@ -4,6 +4,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 
 import { loadConfig } from "../config/app-server-config.js";
+import { PiSessionPresence } from "../pi/session-presence.js";
 import type { CodexServerContext } from "./codex-server-experience.js";
 import { createCodexServerExperience } from "./codex-server-experience.js";
 import { AppDaemonController } from "./daemon-controller.js";
@@ -46,6 +47,7 @@ const toCodexServerContext = (
 
 export default function piCodexAppServerExtension(pi: ExtensionAPI): void {
   const config = loadConfig();
+  const presence = new PiSessionPresence(config.paths.home);
   const experience = createCodexServerExperience({
     autoStart: config.autoStart,
     control: new AppDaemonController(config),
@@ -62,9 +64,13 @@ export default function piCodexAppServerExtension(pi: ExtensionAPI): void {
     },
   });
   pi.on("session_start", async (_event, context) => {
+    if (process.env.PI_CODEX_APP_SERVER_INTERNAL !== String(process.pid)) {
+      await presence.start(context.sessionManager.getSessionId());
+    }
     await experience.handleSessionStart(toCodexServerContext(context));
   });
-  pi.on("session_shutdown", (_event, context) => {
+  pi.on("session_shutdown", async (_event, context) => {
+    await presence.stop();
     context.ui.setStatus("codex-server", undefined);
   });
 }

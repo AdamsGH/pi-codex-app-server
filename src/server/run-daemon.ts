@@ -56,6 +56,7 @@ const handleSocket = async (
 };
 
 const runLockedDaemon = async (config: AppServerConfig): Promise<void> => {
+  process.env.PI_CODEX_APP_SERVER_INTERNAL = String(process.pid);
   if (config.listenUrl.protocol !== "ws:") {
     throw new Error(
       "Direct daemon listening supports ws://. Terminate TLS in a local proxy for wss://."

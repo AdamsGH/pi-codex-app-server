@@ -8,6 +8,7 @@ import type { ThreadListResponse } from "../../vendor/openai-codex-app-server-pr
 import type { MetadataDatabase } from "../storage/metadata-database.js";
 import type { ThreadMetadata } from "../storage/metadata-records.js";
 import { projectPiConversation } from "./conversation-projector.js";
+import type { PiSessionPublication } from "./session-publication.js";
 import type { PiSessionRepository } from "./session-repository.js";
 import { PiThreadSections } from "./thread-sections.js";
 
@@ -84,18 +85,24 @@ export class PiThreadCatalog {
   readonly #database: MetadataDatabase;
   readonly #sessionRepository: PiSessionRepository;
   readonly sections: PiThreadSections;
+  readonly publication?: PiSessionPublication;
 
   constructor(options: {
     readonly database: MetadataDatabase;
     readonly sessionRepository: PiSessionRepository;
+    readonly publication?: PiSessionPublication;
   }) {
     this.#database = options.database;
     this.#sessionRepository = options.sessionRepository;
     this.sections = new PiThreadSections(options.database);
+    this.publication = options.publication;
   }
 
   async list(params: ThreadListParams): Promise<ThreadListResponse> {
-    const sessions = await this.#sessionRepository.list();
+    const all = await this.#sessionRepository.list();
+    const sessions = this.publication
+      ? await this.publication.select(all)
+      : all;
     const requestedCwds = requestedWorkingDirectories(params.cwd);
     const requestedArchived = params.archived === true;
     const normalizedSearch = params.searchTerm?.trim().toLocaleLowerCase();
@@ -161,11 +168,22 @@ export class PiThreadCatalog {
     };
   }
 
+  describe(session: SessionInfo): Thread {
+    const { position: _position, ...section } = this.sections.get(session.id);
+    return {
+      ...projectThread(session, this.#database.getThread(session.id)),
+      ...section,
+    };
+  }
+
   async read(
     threadId: string,
     includeTurns = false
   ): Promise<Thread | undefined> {
-    const sessions = await this.#sessionRepository.list();
+    const all = await this.#sessionRepository.list();
+    const sessions = this.publication
+      ? await this.publication.select(all)
+      : all;
     const session = sessions.find(({ id }) => id === threadId);
     if (!session) {
       return undefined;

@@ -350,6 +350,11 @@ export class PiLiveSessionManager {
     this.#loaded.clear();
   }
 
+  isWorking(threadId: string): boolean {
+    const loaded = this.#loaded.get(threadId);
+    return loaded?.active !== undefined || loaded?.session.isStreaming === true;
+  }
+
   async start(params: ThreadStartParams): Promise<ThreadStartResponse> {
     const cwd = path.resolve(params.cwd ?? process.cwd());
     const model = this.#modelCatalog.resolve(params.model);
