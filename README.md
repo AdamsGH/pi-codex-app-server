@@ -119,6 +119,16 @@ pi-codex-app-server [command]
 
 Logs go to stderr as JSON Lines. Email addresses and JWTs are redacted on the way out.
 
+## Sidebar organization
+
+Repository sessions share projects by Git root. Other sessions use the Pi section. Projects, section membership, and manual moves persist across daemon restarts. Codex desktop also needs its saved remote-project catalog populated. Use the reusable [sidebar sync script](docs/sidebar-sync.md) to preview, import, or restore that state.
+
+```powershell
+bun run sidebar sync --host-id 'remote-control:ENVIRONMENT_ID' --dry-run
+```
+
+Apply from a separate terminal with Codex desktop closed. The script creates a backup and verifies the replacement. It also supports export/apply when Pi runs on another machine.
+
 ## Configuration
 
 Everything is environment variables. The config is parsed with Zod at startup, so a bad value fails loudly instead of silently defaulting.
@@ -152,6 +162,8 @@ Implemented today:
 
 - Lifecycle: `initialize`, `initialized`, `getAuthStatus`, `account/read`, `account/logout`, `model/list`, `modelProvider/capabilities/read`
 - Threads: `thread/list`, `thread/read`, `thread/start`, `thread/resume`, `thread/loaded/list`, `thread/name/set`, `thread/compact/start`, `thread/archive`, `thread/unarchive`, `thread/delete`, `thread/unsubscribe`
+- Projects: `project/list`, `project/read`, `project/create`, `project/import`, `project/update`, `project/move`, `project/delete`, `thread/metadata/update` for project assignment
+- Sections: `threadSection/list`, `threadSection/create`, `threadSection/update`, `threadSection/delete`, `thread/section/move`
 - Turns: `turn/start`, `turn/steer`, `turn/interrupt`
 - Streaming notifications: `thread/started`, `thread/name/updated`, `turn/started`, `turn/completed`, `item/started`, `item/completed`, `item/agentMessage/delta`, `item/reasoning/textDelta`
 

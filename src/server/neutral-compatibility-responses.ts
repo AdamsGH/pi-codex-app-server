@@ -15,10 +15,6 @@ export const registerNeutralCompatibilityResponses = (
     data: [],
     nextCursor: null,
   }));
-  connection.registerRequest("threadSection/list", () => ({
-    data: [],
-    nextCursor: null,
-  }));
   connection.registerRequest("thread/goal/get", () => ({ goal: null }));
   connection.registerRequest("experimentalFeature/list", () => ({
     data: [],

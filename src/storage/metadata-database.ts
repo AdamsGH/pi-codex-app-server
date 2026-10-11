@@ -88,6 +88,10 @@ export class MetadataDatabase {
       .run();
   }
 
+  deleteProject(projectId: string): void {
+    this.#database.delete(projects).where(eq(projects.id, projectId)).run();
+  }
+
   listThreads(): readonly ThreadMetadata[] {
     return this.#database
       .select()

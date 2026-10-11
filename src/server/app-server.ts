@@ -79,6 +79,62 @@ export class AppServer {
   register(connection: JsonRpcConnection): void {
     connection.registerCompatibilityFallbacks();
     registerNeutralCompatibilityResponses(connection);
+    const { sections } = this.#threadCatalog;
+    connection.registerRequest("threadSection/list", (params) =>
+      sections.list(params)
+    );
+    connection.registerRequest("threadSection/create", (params) =>
+      sections.create(params)
+    );
+    connection.registerRequest("threadSection/update", (params) =>
+      sections.update(params)
+    );
+    connection.registerRequest("threadSection/delete", (params) =>
+      sections.delete(params.sectionId)
+    );
+    connection.registerRequest("thread/section/move", async (params) => {
+      await this.#sessionRepository.list();
+      return sections.move(params);
+    });
+
+    const { projects } = this.#sessionRepository;
+    connection.registerRequest("project/list", async (params) => {
+      await this.#sessionRepository.list();
+      return projects.list(params);
+    });
+    connection.registerRequest("project/read", (params) =>
+      projects.read(params.projectId)
+    );
+    connection.registerRequest("project/create", (params) =>
+      projects.create(params)
+    );
+    connection.registerRequest("project/import", async (params) => {
+      await this.#sessionRepository.list();
+      return projects.import(params);
+    });
+    connection.registerRequest("project/update", (params) =>
+      projects.update(params)
+    );
+    connection.registerRequest("project/delete", (params) =>
+      projects.delete(params.projectId)
+    );
+    connection.registerRequest("project/move", (params) =>
+      projects.move(params)
+    );
+    connection.registerRequest("thread/metadata/update", async (params) => {
+      if (params.gitInfo !== undefined && params.gitInfo !== null) {
+        throw new Error("Updating Pi thread Git metadata is not supported");
+      }
+      await this.#sessionRepository.list();
+      if (params.projectId !== undefined && params.projectId !== null) {
+        projects.assign(params.threadId, params.projectId || null);
+      }
+      const thread = await this.#threadCatalog.read(params.threadId);
+      if (!thread) {
+        throw new Error(`Thread not found: ${params.threadId}`);
+      }
+      return { thread };
+    });
 
     const initialize = (_params: InitializeParams): InitializeResponse => {
       const response: InitializeResponse = {

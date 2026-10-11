@@ -9,6 +9,7 @@ import type { MetadataDatabase } from "../storage/metadata-database.js";
 import type { ThreadMetadata } from "../storage/metadata-records.js";
 import { projectPiConversation } from "./conversation-projector.js";
 import type { PiSessionRepository } from "./session-repository.js";
+import { PiThreadSections } from "./thread-sections.js";
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 500;
@@ -82,6 +83,7 @@ const projectThread = (
 export class PiThreadCatalog {
   readonly #database: MetadataDatabase;
   readonly #sessionRepository: PiSessionRepository;
+  readonly sections: PiThreadSections;
 
   constructor(options: {
     readonly database: MetadataDatabase;
@@ -89,6 +91,7 @@ export class PiThreadCatalog {
   }) {
     this.#database = options.database;
     this.#sessionRepository = options.sessionRepository;
+    this.sections = new PiThreadSections(options.database);
   }
 
   async list(params: ThreadListParams): Promise<ThreadListResponse> {
@@ -102,19 +105,45 @@ export class PiThreadCatalog {
         const archived = metadata?.archived ?? false;
         const cwdMatches = !requestedCwds || requestedCwds.has(session.cwd);
         const archiveMatches = archived === requestedArchived;
+        const sectionMatches =
+          params.sectionId === undefined ||
+          this.sections.get(session.id).section?.id === params.sectionId ||
+          (params.sectionId === null &&
+            this.sections.get(session.id).section === null);
         const searchMatches =
           !normalizedSearch ||
           session.name?.toLocaleLowerCase().includes(normalizedSearch) ||
           session.firstMessage.toLocaleLowerCase().includes(normalizedSearch);
-        return cwdMatches && archiveMatches && searchMatches;
+        const projectMatches =
+          params.projectId === undefined ||
+          (metadata?.projectId ?? null) === params.projectId;
+        return (
+          cwdMatches &&
+          archiveMatches &&
+          searchMatches &&
+          sectionMatches &&
+          projectMatches
+        );
       })
-      .map((session) =>
-        projectThread(session, this.#database.getThread(session.id))
-      );
+      .map((session) => {
+        const { position: _position, ...section } = this.sections.get(
+          session.id
+        );
+        return {
+          ...projectThread(session, this.#database.getThread(session.id)),
+          ...section,
+        };
+      });
     const direction = params.sortDirection ?? "desc";
     const sorted = orderBy(
       threads,
-      [(thread) => sortTimestamp(thread, params.sortKey), "id"],
+      [
+        (thread) =>
+          params.sortKey === "section_position"
+            ? this.sections.get(thread.id).position
+            : sortTimestamp(thread, params.sortKey),
+        "id",
+      ],
       [direction, direction]
     );
     const offset = params.cursor ? cursorSchema.parse(params.cursor) : 0;
@@ -148,6 +177,8 @@ export class PiThreadCatalog {
       this.#database.getThread(threadId),
       sessionContext?.model?.provider
     );
+    const { position: _position, ...section } = this.sections.get(threadId);
+    Object.assign(thread, section);
     if (includeTurns && sessionManager) {
       thread.turns = [
         ...projectPiConversation(

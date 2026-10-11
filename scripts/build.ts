@@ -28,7 +28,10 @@ const libraryBuild = await Bun.build({
 const cliBuild = await Bun.build({
   ...sharedOptions,
   banner: "#!/usr/bin/env node",
-  entrypoints: [path.resolve(root, "src/cli.ts")],
+  entrypoints: [
+    path.resolve(root, "src/cli.ts"),
+    path.resolve(root, "src/sidebar-sync.ts"),
+  ],
   outdir: path.resolve(root, "dist"),
 });
 
