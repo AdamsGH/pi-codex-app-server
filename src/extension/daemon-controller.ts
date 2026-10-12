@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { closeSync, mkdirSync, openSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -56,25 +57,34 @@ const waitForChildFailure = async (
   }
 };
 
-const startDaemonProcess = (): DaemonLaunch => {
+const startDaemonProcess = (logs: string): DaemonLaunch => {
   const cliPath = fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
   const loaderUrl = new URL(
     "../../dist/runtime/pi-module-loader.js",
     import.meta.url
   );
-  const child = spawn(
-    process.execPath,
-    ["--import", loaderUrl.href, cliPath, "daemon"],
-    {
-      detached: true,
-      env: {
-        ...process.env,
-        PI_CODEX_APP_SERVER_PI_PACKAGE_DIR: getPackageDir(),
-      },
-      stdio: "ignore",
-      windowsHide: true,
-    }
-  );
+  mkdirSync(logs, { recursive: true });
+  const output = openSync(path.join(logs, "daemon.stdout.log"), "a");
+  const errors = openSync(path.join(logs, "daemon.stderr.log"), "a");
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn(
+      process.execPath,
+      ["--import", loaderUrl.href, cliPath, "daemon"],
+      {
+        detached: true,
+        env: {
+          ...process.env,
+          PI_CODEX_APP_SERVER_PI_PACKAGE_DIR: getPackageDir(),
+        },
+        stdio: ["ignore", output, errors],
+        windowsHide: true,
+      }
+    );
+  } finally {
+    closeSync(output);
+    closeSync(errors);
+  }
   if (!child.pid) {
     throw new Error("Codex App Server process did not receive a PID");
   }
@@ -107,7 +117,7 @@ export class AppDaemonController {
 
   constructor(config: AppServerConfig, launchDaemon = startDaemonProcess) {
     this.#config = config;
-    this.#launchDaemon = launchDaemon;
+    this.#launchDaemon = () => launchDaemon(config.paths.logs);
   }
 
   async pair(): Promise<PairingResult> {

@@ -20,4 +20,13 @@ export const registerNeutralCompatibilityResponses = (
     data: [],
     nextCursor: null,
   }));
+  connection.registerRequest("hooks/list", () => ({ data: [] }));
+  connection.registerRequest("mcpServerStatus/list", () => ({
+    data: [],
+    nextCursor: null,
+  }));
+  connection.registerRequest("thread/queue/list", () => ({
+    data: [],
+    nextCursor: null,
+  }));
 };

@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { platform } from "node:os";
 import path from "node:path";
 
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+
 import type { InitializeParams } from "../../vendor/openai-codex-app-server-protocol/typescript/InitializeParams.js";
 import type { InitializeResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/InitializeResponse.js";
 import type { GetAccountResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/GetAccountResponse.js";
@@ -13,6 +15,8 @@ import type { TurnStartParams } from "../../vendor/openai-codex-app-server-proto
 import { codexAppServerUserAgent } from "../codex-app-server-identity.js";
 import type { AppServerConfig } from "../config/app-server-config.js";
 import { appServerLogger } from "../logging/app-server-logger.js";
+import { selectForkEntries } from "../pi/fork-entries.js";
+import { paginateHistory } from "../pi/history-pagination.js";
 import type { PiLiveSessionManager } from "../pi/live-session-manager.js";
 import type { PiModelCatalog } from "../pi/model-catalog.js";
 import type { PiModelRuntime } from "../pi/pi-model-runtime.js";
@@ -20,6 +24,7 @@ import type { PiSessionRepository } from "../pi/session-repository.js";
 import type { PiThreadCatalog } from "../pi/thread-catalog.js";
 import type { JsonRpcConnection } from "../protocol/json-rpc-connection.js";
 import type { MetadataDatabase } from "../storage/metadata-database.js";
+import { registerHostOperations } from "./host-operations.js";
 import { registerNeutralCompatibilityResponses } from "./neutral-compatibility-responses.js";
 
 const readModelProviderCapabilities =
@@ -98,6 +103,7 @@ export class AppServer {
     }
     connection.registerCompatibilityFallbacks();
     registerNeutralCompatibilityResponses(connection);
+    registerHostOperations(connection);
     const { sections } = this.#threadCatalog;
     connection.registerRequest("threadSection/list", (params) =>
       sections.list(params)
@@ -175,6 +181,43 @@ export class AppServer {
       context: { readonly signal: AbortSignal }
     ) => this.#modelCatalog.list(params, context.signal);
     connection.registerRequest("model/list", listModels);
+    connection.registerRequest("config/read", () => {
+      const model = this.#modelCatalog.resolve();
+      return {
+        config: {
+          analytics: null,
+          approval_policy: "never" as const,
+          approvals_reviewer: "user" as const,
+          apps: null,
+          browser_use: null,
+          compact_prompt: null,
+          computer_use: null,
+          desktop: null,
+          developer_instructions: null,
+          forced_chatgpt_workspace_id: null,
+          forced_login_method: null,
+          instructions: null,
+          model: model
+            ? `${encodeURIComponent(model.provider)}/${encodeURIComponent(model.id)}`
+            : null,
+          model_auto_compact_token_limit: null,
+          model_auto_compact_token_limit_scope: null,
+          model_context_window: null,
+          model_provider: model?.provider ?? null,
+          model_reasoning_effort: null,
+          model_reasoning_summary: null,
+          model_verbosity: null,
+          review_model: null,
+          sandbox_mode: "danger-full-access" as const,
+          sandbox_workspace_write: null,
+          service_tier: null,
+          tools: null,
+          web_search: null,
+        },
+        layers: null,
+        origins: {},
+      };
+    });
 
     connection.registerRequest(
       "modelProvider/capabilities/read",
@@ -228,6 +271,54 @@ export class AppServer {
       return { thread: this.#liveSessionManager.withActiveTurn(thread) };
     };
     connection.registerRequest("thread/read", readThread);
+    connection.registerRequest("thread/turns/list", async (params, context) => {
+      const { thread } = await readThread(
+        { includeTurns: true, threadId: params.threadId },
+        context
+      );
+      const page = paginateHistory(thread.turns, {
+        cursor: params.cursor,
+        direction: params.sortDirection ?? "desc",
+        key: (turn) => turn.id,
+        limit: params.limit,
+        scope: `turns:${params.threadId}`,
+      });
+      return {
+        ...page,
+        data: page.data.map((turn) => ({
+          ...turn,
+          items: params.itemsView === "notLoaded" ? [] : turn.items,
+          itemsView:
+            params.itemsView === "notLoaded"
+              ? ("notLoaded" as const)
+              : ("full" as const),
+        })),
+      };
+    });
+    connection.registerRequest("thread/items/list", async (params, context) => {
+      const { thread } = await readThread(
+        { includeTurns: true, threadId: params.threadId },
+        context
+      );
+      if (
+        params.turnId &&
+        !thread.turns.some((turn) => turn.id === params.turnId)
+      ) {
+        throw new Error(`Turn not found: ${params.turnId}`);
+      }
+      const entries = thread.turns
+        .filter((turn) => !params.turnId || turn.id === params.turnId)
+        .flatMap((turn) =>
+          turn.items.map((item) => ({ item, turnId: turn.id }))
+        );
+      return paginateHistory(entries, {
+        cursor: params.cursor,
+        direction: params.sortDirection ?? "asc",
+        key: (entry) => `${entry.turnId}:${entry.item.id}`,
+        limit: params.limit,
+        scope: `items:${params.threadId}:${params.turnId ?? "all"}`,
+      });
+    });
 
     const startThread = async (
       params: ThreadStartParams,
@@ -300,6 +391,53 @@ export class AppServer {
       };
     };
     connection.registerRequest("thread/resume", resumeThread);
+
+    connection.registerRequest("thread/fork", async (params, context) => {
+      if (params.ephemeral) {
+        throw new Error("Ephemeral Pi forks are not supported");
+      }
+      const source = params.path
+        ? SessionManager.open(params.path)
+        : await this.#sessionRepository.load(params.threadId);
+      if (
+        !source ||
+        !(await this.#threadCatalog.read(source.getSessionId(), true))
+      ) {
+        throw new Error(`Thread not found: ${params.threadId}`);
+      }
+      if (
+        !params.beforeTurnId &&
+        !params.lastTurnId &&
+        this.#liveSessionManager.isWorking(source.getSessionId())
+      ) {
+        throw new Error("Cannot fork a Pi thread while its turn is running");
+      }
+      const entries = selectForkEntries(
+        source,
+        params.lastTurnId,
+        params.beforeTurnId
+      );
+      const cwd = path.resolve(params.cwd ?? source.getCwd());
+      await this.#threadCatalog.publication?.assertCanStart(cwd);
+      if (params.model && !this.#modelCatalog.resolve(params.model)) {
+        throw new Error(`Unknown Pi model: ${params.model}`);
+      }
+      const threadId = await this.#sessionRepository.fork(source, entries, cwd);
+      const manager = await this.#sessionRepository.load(threadId);
+      if (params.model && manager) {
+        const model = this.#modelCatalog.resolve(params.model);
+        if (model) {
+          manager.appendModelChange(model.provider, model.id);
+        }
+      }
+      const response = await resumeThread({ threadId }, context);
+      response.thread.forkedFromId = source.getSessionId();
+      if (params.excludeTurns) {
+        response.thread.turns = [];
+      }
+      connection.notify("thread/started", { thread: response.thread });
+      return response;
+    });
 
     connection.registerRequest("thread/loaded/list", (params) =>
       this.#liveSessionManager.loadedList(params)

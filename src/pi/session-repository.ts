@@ -1,7 +1,11 @@
-import { rm, stat } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import type { SessionInfo } from "@earendil-works/pi-coding-agent";
+import type {
+  SessionEntry,
+  SessionInfo,
+} from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 
 import type { MetadataDatabase } from "../storage/metadata-database.js";
@@ -66,7 +70,12 @@ export class PiSessionRepository {
   }
 
   async list(): Promise<readonly SessionInfo[]> {
-    const sessions = await SessionManager.listAll();
+    const listed = await SessionManager.listAll();
+    const sessions = listed.map((session) =>
+      session.created > session.modified
+        ? { ...session, modified: session.created }
+        : session
+    );
     for (const session of sessions) {
       const stored = this.#database.getThread(session.id);
       this.#database.upsertThread({
@@ -124,7 +133,12 @@ export class PiSessionRepository {
     const created = new Date(header.timestamp);
     const { activity, ...summary } = summarizeMessages(manager);
     if (activity > 0) {
-      modified = new Date(activity);
+      modified = new Date(
+        Math.max(
+          activity,
+          Number.isFinite(created.getTime()) ? created.getTime() : activity
+        )
+      );
     } else if (Number.isFinite(created.getTime())) {
       modified = created;
     }
@@ -154,5 +168,38 @@ export class PiSessionRepository {
     await rm(thread.sessionFile);
     this.#database.deleteThread(threadId);
     return true;
+  }
+
+  async fork(
+    source: SessionManager,
+    entries: readonly SessionEntry[],
+    cwd: string,
+    sessionDir?: string
+  ): Promise<string> {
+    const manager = SessionManager.create(cwd, sessionDir, {
+      parentSession: source.getSessionFile(),
+    });
+    const file = manager.getSessionFile();
+    const header = manager.getHeader();
+    if (!(file && header)) {
+      throw new Error("Pi did not create a fork session path");
+    }
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      `${[header, ...entries]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n")}\n`,
+      { flag: "wx" }
+    );
+    const threadId = manager.getSessionId();
+    this.#database.upsertThread({
+      archived: false,
+      projectId: this.projects.discover(cwd),
+      sessionFile: file,
+      threadId,
+      updatedAt: Date.now(),
+    });
+    return threadId;
   }
 }

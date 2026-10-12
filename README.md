@@ -13,7 +13,8 @@ This is an adapter, not a Codex reimplementation. Pi still picks the models, run
 - **Pi chat models.** `model/list` returns available chat models from all Pi providers, with their supported reasoning levels. Image and classifier catalogs do not appear in the chat selector. The default follows Pi's model settings; explicit selections pass through without rewriting or silent fallback.
 - **Pi history, projected on demand.** Pi's JSONL sessions stay the source of truth. Threads, turns, and items are computed from them when a client asks.
 - **One credential.** Pi owns the OpenAI OAuth token. This server borrows it and routes logout back through Pi, so two stores never rotate the same refresh token.
-- **No `Method not found`.** Codex methods without a Pi equivalent return schema-valid neutral results, validated by Ajv against the official Codex JSON Schemas.
+- **Explicit protocol support.** Implemented methods return results validated against the official Codex JSON Schemas. Unsupported actions return `Method not implemented`, rather than a fabricated success.
+- **Host operations and forks.** Desktop filesystem queries read the host filesystem. Non-PTY processes report output and exit through the Codex process protocol. Forks copy the selected Pi conversation branch into a new session without changing the source. Ephemeral forks and PTY processes return an explicit unsupported error.
 - **Controlled from inside Pi.** A `/codex-server` command starts, stops, inspects, and pairs the daemon without leaving the TUI.
 
 ## How it works
@@ -154,7 +155,7 @@ Under `PI_CODEX_APP_SERVER_HOME`:
 | --- | --- |
 | `state.sqlite` | Projects, thread metadata, writer leases, enrollment and pairing state. No conversation content |
 | `endpoint.json` | PID, WebSocket URL, and start time of the running daemon. Written with mode `0600` |
-| `logs/` | Created for the daemon. The server itself writes to stderr |
+| `logs/` | Extension-launched daemons append stdout and stderr to `daemon.stdout.log` and `daemon.stderr.log`. Request logs contain method names, IDs, timings, and error codes, without request bodies |
 
 ## Protocol coverage
 

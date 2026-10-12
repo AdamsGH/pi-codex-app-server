@@ -2,6 +2,7 @@ import type { Logger } from "@logtape/logtape";
 import {
   JSONRPCClient,
   JSONRPCErrorCode,
+  JSONRPCErrorException,
   JSONRPCServer,
   JSONRPCServerAndClient,
 } from "json-rpc-2.0";
@@ -13,10 +14,7 @@ import type {
   CodexClientMethods,
   CodexServerMethods,
 } from "./generated/codex-methods.js";
-import {
-  CodexClientMethodNames,
-  CodexClientNeutralResponses,
-} from "./generated/codex-methods.js";
+import { CodexClientMethodNames } from "./generated/codex-methods.js";
 import {
   ProtocolValidationError,
   addJsonRpcVersion,
@@ -82,6 +80,7 @@ export class JsonRpcConnection {
   readonly #context: JsonRpcRequestContext;
   readonly #logger: Logger;
   readonly #pendingClientRequests = new Map<string | number, ClientMethod>();
+  readonly #requestStartedAt = new Map<string | number, number>();
   readonly #pendingServerRequests = new Map<string | number, ServerMethod>();
   readonly #peer: CodexJsonRpcPeer;
   readonly #transport: MessageTransport;
@@ -217,6 +216,12 @@ export class JsonRpcConnection {
             );
           }
           this.#pendingClientRequests.set(request.id, request.method);
+          this.#requestStartedAt.set(request.id, performance.now());
+          this.#logger.debug("App-server request received", {
+            clientId: this.#clientId,
+            method: request.method,
+            requestId: request.id,
+          });
         } else {
           parseClientNotification(message);
         }
@@ -257,13 +262,16 @@ export class JsonRpcConnection {
   #registerCompatibilityFallback<Method extends ClientMethod>(
     method: Method
   ): void {
-    this.#peer.server.addMethod(method, () =>
-      structuredClone(CodexClientNeutralResponses[method])
-    );
+    this.#peer.server.addMethod(method, () => {
+      throw new JSONRPCErrorException(
+        `Method not implemented: ${method}`,
+        JSONRPCErrorCode.MethodNotFound
+      );
+    });
   }
 
   async #sendPayload(payload: JsonRpcLibraryMessage): Promise<void> {
-    const message = removeJsonRpcVersion(payload);
+    let message = removeJsonRpcVersion(payload);
     if ("method" in message) {
       if ("id" in message) {
         const request = parseServerRequest(message);
@@ -274,12 +282,40 @@ export class JsonRpcConnection {
     } else {
       const method = this.#pendingClientRequests.get(message.id);
       if (method && message.result !== undefined) {
-        validateClientResponse(method, message.result);
-        if (method === "initialize") {
-          this.#initialized = true;
+        try {
+          validateClientResponse(method, message.result);
+          if (method === "initialize") {
+            this.#initialized = true;
+          }
+        } catch (error) {
+          const failure =
+            error instanceof Error
+              ? error
+              : new Error("Invalid server response");
+          this.#logger.error(failure, { clientId: this.#clientId, method });
+          message = {
+            error: {
+              code: JSONRPCErrorCode.InternalError,
+              message: failure.message,
+            },
+            id: message.id,
+          };
         }
       }
       this.#pendingClientRequests.delete(message.id);
+      const startedAt = this.#requestStartedAt.get(message.id);
+      this.#requestStartedAt.delete(message.id);
+      this.#logger.debug("App-server request completed", {
+        clientId: this.#clientId,
+        durationMs:
+          startedAt === undefined
+            ? null
+            : Math.round(performance.now() - startedAt),
+        errorCode: message.error?.code ?? null,
+        errorMessage: message.error?.message ?? null,
+        method,
+        requestId: message.id,
+      });
     }
     await this.#transport.send(JSON.stringify(message));
   }

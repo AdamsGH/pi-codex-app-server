@@ -25,6 +25,54 @@ const oneExperimentalRequest =
   };
 
 describe("JSON-RPC boundary", () => {
+  test("keeps the connection alive after an invalid handler response", async () => {
+    const sent: string[] = [];
+    const requests = [
+      {
+        id: 1,
+        method: "initialize",
+        params: { clientInfo: { name: "test", version: "1" } },
+      },
+      { id: 2, method: "thread/loaded/list", params: { cursor: "invalid" } },
+      { id: 3, method: "thread/loaded/list", params: {} },
+    ];
+    const connection = new JsonRpcConnection({
+      clientId: "validation-test",
+      logger: appServerLogger,
+      transport: {
+        close: () => {},
+        read: async function* read() {
+          for (const request of requests) {
+            yield JSON.stringify(request);
+          }
+        },
+        send: (message) => {
+          sent.push(message);
+          return Promise.resolve();
+        },
+      },
+    });
+    connection.registerRequest("initialize", () => ({
+      codexHome: "/tmp",
+      platformFamily: "unix",
+      platformOs: "linux",
+      userAgent: "test",
+    }));
+    connection.registerRequest("thread/loaded/list", (params) => {
+      const response = { data: ["valid"], nextCursor: null };
+      if (params.cursor === "invalid") {
+        Object.defineProperty(response, "data", { value: [42] });
+      }
+      return response;
+    });
+    await connection.run();
+    expect(sent.map(parseCodexWireMessage)).toMatchObject([
+      { id: 1, result: {} },
+      { error: { code: -32_603 }, id: 2 },
+      { id: 3, result: { data: ["valid"] } },
+    ]);
+  });
+
   test("accepts the desktop post-initialize authentication request", () => {
     const request = {
       id: "desktop-auth:repro",
@@ -129,7 +177,7 @@ describe("JSON-RPC boundary", () => {
     }
   });
 
-  test("accepts an experimental method through the compatibility fallback", async () => {
+  test("rejects unimplemented methods instead of returning generated fixtures", async () => {
     const sent: string[] = [];
     const transport: MessageTransport = {
       close: () => {},
@@ -145,13 +193,19 @@ describe("JSON-RPC boundary", () => {
       transport,
     });
     connection.registerCompatibilityFallbacks();
+    connection.registerRequest("initialize", () => ({
+      codexHome: "/tmp/codex",
+      platformFamily: "unix",
+      platformOs: "linux",
+      userAgent: codexAppServerUserAgent(),
+    }));
 
     await connection.run();
 
     expect(sent).toHaveLength(2);
     expect(parseCodexWireMessage(sent[1] ?? "")).toMatchObject({
+      error: { code: -32_601 },
       id: 11,
-      result: { data: [] },
     });
   });
 
@@ -200,6 +254,12 @@ describe("JSON-RPC boundary", () => {
       },
     });
     connection.registerCompatibilityFallbacks();
+    connection.registerRequest("initialize", () => ({
+      codexHome: "/tmp/codex",
+      platformFamily: "unix",
+      platformOs: "linux",
+      userAgent: codexAppServerUserAgent(),
+    }));
     connection.registerInitialized(() => {
       connection.notify("thread/name/updated", {
         threadId: "thread",
@@ -207,6 +267,10 @@ describe("JSON-RPC boundary", () => {
       });
       connection.notify("thread/archived", { threadId: "thread" });
     });
+    connection.registerRequest("thread/loaded/list", () => ({
+      data: [],
+      nextCursor: null,
+    }));
     await connection.run();
     expect(sent.map(parseCodexWireMessage)).toMatchObject([
       { error: { message: "Not initialized" }, id: 1 },

@@ -199,6 +199,13 @@ export class PiThreadCatalog {
     );
     const { position: _position, ...section } = this.sections.get(threadId);
     Object.assign(thread, section);
+    thread.forkedFromId = session.parentSessionPath
+      ? (this.#database
+          .listThreads()
+          .find(
+            (metadata) => metadata.sessionFile === session.parentSessionPath
+          )?.threadId ?? null)
+      : null;
     if (includeTurns && sessionManager) {
       thread.turns = [
         ...projectPiConversation(
