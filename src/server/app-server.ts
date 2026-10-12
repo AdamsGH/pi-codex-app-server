@@ -263,6 +263,8 @@ export class AppServer {
         throw new Error(`Thread not found: ${params.threadId}`);
       }
       if (params.includeTurns) {
+        this.#liveSessionManager.rebindConnection(params.threadId, connection);
+        await this.#liveSessionManager.attachOwner(params.threadId);
         this.#threadCatalog.publication?.retain(
           params.threadId,
           context.signal
@@ -344,6 +346,8 @@ export class AppServer {
       params: { readonly threadId: string },
       context: { signal: AbortSignal }
     ) => {
+      this.#liveSessionManager.rebindConnection(params.threadId, connection);
+      await this.#liveSessionManager.attachOwner(params.threadId);
       const pending = await this.#unpersistedThread(params.threadId);
       if (pending) {
         this.#threadCatalog.publication?.retain(
@@ -447,17 +451,8 @@ export class AppServer {
       readonly name: string;
       readonly threadId: string;
     }): Promise<Record<string, never>> => {
-      const sessionManager = await this.#sessionRepository.load(
-        params.threadId
-      );
-      if (!sessionManager) {
-        throw new Error(`Thread not found: ${params.threadId}`);
-      }
-      sessionManager.appendSessionInfo(params.name);
-      connection.notify("thread/name/updated", {
-        threadId: params.threadId,
-        threadName: params.name || undefined,
-      });
+      this.#liveSessionManager.rebindConnection(params.threadId, connection);
+      await this.#liveSessionManager.setName(params.threadId, params.name);
       return {};
     };
     connection.registerRequest("thread/name/set", setThreadName);
@@ -470,14 +465,19 @@ export class AppServer {
     };
     connection.registerRequest("thread/compact/start", compactThread);
 
-    connection.registerRequest("thread/unsubscribe", (params, context) => ({
-      status: this.#threadCatalog.publication?.release(
+    connection.registerRequest("thread/unsubscribe", (params, context) => {
+      const detached = this.#liveSessionManager.detach(
+        params.threadId,
+        connection
+      );
+      const released = this.#threadCatalog.publication?.release(
         params.threadId,
         context.signal
-      )
-        ? "unsubscribed"
-        : "notSubscribed",
-    }));
+      );
+      return {
+        status: detached || released ? "unsubscribed" : "notSubscribed",
+      };
+    });
 
     const startTurn = async (
       params: TurnStartParams,
@@ -530,18 +530,22 @@ export class AppServer {
     const deleteThread = async (params: {
       readonly threadId: string;
     }): Promise<Record<string, never>> => {
-      if (this.#liveSessionManager.isWorking(params.threadId)) {
-        throw new Error(`Thread is already running: ${params.threadId}`);
+      const release = await this.#liveSessionManager.deletionLease(
+        params.threadId
+      );
+      try {
+        if (
+          !(await this.#unpersistedThread(params.threadId)) &&
+          !(await this.#sessionRepository.delete(params.threadId))
+        ) {
+          throw new Error(`Thread not found: ${params.threadId}`);
+        }
+        this.#liveSessionManager.unload(params.threadId);
+        this.#newThreads.delete(params.threadId);
+        return {};
+      } finally {
+        await release();
       }
-      if (
-        !(await this.#unpersistedThread(params.threadId)) &&
-        !(await this.#sessionRepository.delete(params.threadId))
-      ) {
-        throw new Error(`Thread not found: ${params.threadId}`);
-      }
-      this.#liveSessionManager.unload(params.threadId);
-      this.#newThreads.delete(params.threadId);
-      return {};
     };
     connection.registerRequest("thread/delete", deleteThread);
   }

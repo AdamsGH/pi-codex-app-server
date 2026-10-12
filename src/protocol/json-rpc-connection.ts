@@ -116,6 +116,10 @@ export class JsonRpcConnection {
     });
   }
 
+  get signal(): AbortSignal {
+    return this.#abortController.signal;
+  }
+
   close(): void {
     this.#abortController.abort();
     this.#peer.rejectAllPendingRequests("JSON-RPC connection closed");

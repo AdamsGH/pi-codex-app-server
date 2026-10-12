@@ -8,10 +8,7 @@ import {
   SessionManager,
   createAgentSession,
 } from "@earendil-works/pi-coding-agent";
-import type {
-  AgentSession,
-  AgentSessionEvent,
-} from "@earendil-works/pi-coding-agent";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 
 import type { Thread } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/Thread.js";
@@ -25,10 +22,25 @@ import type { TurnStartParams } from "../../vendor/openai-codex-app-server-proto
 import type { TurnSteerParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnSteerParams.js";
 import type { TurnSteerResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnSteerResponse.js";
 import type { UserInput } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/UserInput.js";
+import { appServerLogger } from "../logging/app-server-logger.js";
 import type { JsonRpcConnection } from "../protocol/json-rpc-connection.js";
+import {
+  parseCodexWireMessage,
+  parseServerNotification,
+} from "../protocol/validation.js";
 import { projectPiConversation } from "./conversation-projector.js";
+import {
+  emptyTurn,
+  handleEvent,
+  notifyItemStarted,
+  notifyItemCompleted,
+} from "./live-turn.js";
+import type { ActiveTurn } from "./live-turn.js";
 import { PiModelCatalog } from "./model-catalog.js";
 import type { PiModelRuntime } from "./pi-model-runtime.js";
+import { SessionOwnerClient } from "./session-owner-client.js";
+import { acquireSessionLease } from "./session-owner.js";
+import { readPiPresence } from "./session-presence.js";
 import type { PiSessionRepository } from "./session-repository.js";
 import type { PiThreadCatalog } from "./thread-catalog.js";
 
@@ -56,10 +68,6 @@ const loadedCursorSchema = z
   .string()
   .regex(/^pi-loaded:\d+$/u)
   .transform((cursor) => Number(cursor.slice("pi-loaded:".length)));
-const toolResultTextSchema = z.union([
-  z.string(),
-  z.json().transform((value) => JSON.stringify(value)),
-]);
 
 const MIME_TYPES = new Map([
   [".gif", "image/gif"],
@@ -73,46 +81,10 @@ interface LoadedSession {
   active?: ActiveTurn;
   completion?: Promise<void>;
   readonly session: AgentSession;
+  release?: () => Promise<void>;
 }
 
-interface ActiveTurn {
-  readonly historyTurnCount: number;
-  interrupted: boolean;
-  failure?: Error;
-  readonly agentItems: Map<
-    number,
-    Extract<ThreadItem, { type: "agentMessage" }>
-  >;
-  connection: JsonRpcConnection;
-  readonly reasoningItems: Map<
-    number,
-    Extract<ThreadItem, { type: "reasoning" }>
-  >;
-  readonly startedAtMs: number;
-  readonly threadId: string;
-  readonly toolItems: Map<
-    string,
-    Extract<ThreadItem, { type: "dynamicToolCall" }>
-  >;
-  readonly turn: Turn;
-  unsubscribe?: () => void;
-}
-
-const emptyTurn = (): Turn => {
-  const startedAt = Date.now();
-  return {
-    completedAt: null,
-    durationMs: null,
-    error: null,
-    id: randomUUID(),
-    items: [],
-    itemsView: "full",
-    startedAt: Math.floor(startedAt / 1000),
-    status: "inProgress",
-  };
-};
-
-const textPrompt = (input: readonly UserInput[]): string =>
+export const textPrompt = (input: readonly UserInput[]): string =>
   input
     .map((part) => {
       switch (part.type) {
@@ -147,7 +119,7 @@ const remoteImage = async (url: string): Promise<ImageContent> => {
   if (dataResult.success) {
     return dataResult.data;
   }
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!response.ok) {
     throw new Error(`Could not fetch image: HTTP ${response.status}`);
   }
@@ -175,7 +147,9 @@ const localImage = async (filePath: string): Promise<ImageContent> => {
   };
 };
 
-const images = async (input: readonly UserInput[]): Promise<ImageContent[]> => {
+export const images = async (
+  input: readonly UserInput[]
+): Promise<ImageContent[]> => {
   const imageInputs = input.filter(
     (part): part is Extract<UserInput, { type: "image" | "localImage" }> =>
       part.type === "image" || part.type === "localImage"
@@ -187,145 +161,24 @@ const images = async (input: readonly UserInput[]): Promise<ImageContent[]> => {
   );
 };
 
-const notifyItemStarted = (active: ActiveTurn, item: ThreadItem): void => {
-  active.turn.items.push(item);
-  active.connection.notify("item/started", {
-    item,
-    startedAtMs: Date.now(),
-    threadId: active.threadId,
-    turnId: active.turn.id,
-  });
-};
-
-const notifyItemCompleted = (active: ActiveTurn, item: ThreadItem): void => {
-  active.connection.notify("item/completed", {
-    completedAtMs: Date.now(),
-    item,
-    threadId: active.threadId,
-    turnId: active.turn.id,
-  });
-};
-
-const handleMessageUpdate = (
-  active: ActiveTurn,
-  event: Extract<AgentSessionEvent, { type: "message_update" }>
-): void => {
-  const update = event.assistantMessageEvent;
-  if (update.type === "text_start") {
-    const item = {
-      delivery: null,
-      id: randomUUID(),
-      memoryCitation: null,
-      phase: null,
-      text: "",
-      type: "agentMessage" as const,
-    };
-    active.agentItems.set(update.contentIndex, item);
-    notifyItemStarted(active, item);
-  } else if (update.type === "text_delta") {
-    const item = active.agentItems.get(update.contentIndex);
-    if (item) {
-      item.text += update.delta;
-      active.connection.notify("item/agentMessage/delta", {
-        delta: update.delta,
-        itemId: item.id,
-        threadId: active.threadId,
-        turnId: active.turn.id,
-      });
-    }
-  } else if (update.type === "text_end") {
-    const item = active.agentItems.get(update.contentIndex);
-    if (item) {
-      item.text = update.content;
-      notifyItemCompleted(active, item);
-    }
-  } else if (update.type === "thinking_start") {
-    const item = {
-      content: [""],
-      id: randomUUID(),
-      summary: [],
-      type: "reasoning" as const,
-    };
-    active.reasoningItems.set(update.contentIndex, item);
-    notifyItemStarted(active, item);
-  } else if (update.type === "thinking_delta") {
-    const item = active.reasoningItems.get(update.contentIndex);
-    if (item) {
-      item.content[0] += update.delta;
-      active.connection.notify("item/reasoning/textDelta", {
-        contentIndex: 0,
-        delta: update.delta,
-        itemId: item.id,
-        threadId: active.threadId,
-        turnId: active.turn.id,
-      });
-    }
-  } else if (update.type === "thinking_end") {
-    const item = active.reasoningItems.get(update.contentIndex);
-    if (item) {
-      item.content[0] = update.content;
-      notifyItemCompleted(active, item);
-    }
-  }
-};
-
-const handleToolEvent = (
-  active: ActiveTurn,
-  event: AgentSessionEvent
-): void => {
-  if (event.type === "tool_execution_start") {
-    const item: Extract<ThreadItem, { type: "dynamicToolCall" }> = {
-      arguments: z.json().parse(event.args),
-      contentItems: null,
-      durationMs: null,
-      id: event.toolCallId,
-      namespace: null,
-      status: "inProgress",
-      success: null,
-      tool: event.toolName,
-      type: "dynamicToolCall",
-    };
-    active.toolItems.set(event.toolCallId, item);
-    notifyItemStarted(active, item);
-  } else if (event.type === "tool_execution_end") {
-    const item = active.toolItems.get(event.toolCallId);
-    if (item) {
-      const parsedResult = toolResultTextSchema.safeParse(event.result);
-      item.status = event.isError ? "failed" : "completed";
-      item.success = !event.isError;
-      item.contentItems = [
-        {
-          text: parsedResult.success
-            ? parsedResult.data
-            : "[Unserializable tool result]",
-          type: "inputText",
-        },
-      ];
-      notifyItemCompleted(active, item);
-    }
-  }
-};
-
-const handleEvent = (active: ActiveTurn, event: AgentSessionEvent): void => {
-  if (event.type === "message_end" && event.message.role === "assistant") {
-    if (event.message.stopReason === "aborted") {
-      active.interrupted = true;
-    } else if (event.message.stopReason === "error") {
-      active.failure = new Error(
-        event.message.errorMessage ?? "Pi model request failed"
-      );
-    } else {
-      active.failure = undefined;
-    }
-  }
-  if (event.type === "message_update") {
-    handleMessageUpdate(active, event);
-  } else {
-    handleToolEvent(active, event);
-  }
-};
-
 export class PiLiveSessionManager {
+  #closed = false;
+  #ownerTimer?: ReturnType<typeof setInterval>;
+  readonly #starting = new Set<string>();
+  readonly #home?: string;
+  readonly #lastDeliveredTurn = new Map<string, string>();
+  readonly #lostOwners = new Map<
+    string,
+    { historyTurnCount: number; turn: Turn }
+  >();
+  readonly #ownerGeneration = new Map<string, symbol>();
+  readonly #owners = new Map<string, SessionOwnerClient>();
+  readonly #connectingOwners = new Map<
+    string,
+    Promise<SessionOwnerClient | undefined>
+  >();
+  readonly #loading = new Map<string, Promise<LoadedSession | undefined>>();
+  readonly #subscribers = new Map<string, Set<JsonRpcConnection>>();
   readonly #loaded = new Map<string, LoadedSession>();
   readonly #modelCatalog: PiModelCatalog;
   readonly #modelRuntime: PiModelRuntime;
@@ -333,32 +186,72 @@ export class PiLiveSessionManager {
   readonly #threadCatalog: PiThreadCatalog;
 
   constructor(options: {
+    readonly home?: string;
     readonly modelCatalog: PiModelCatalog;
     readonly modelRuntime: PiModelRuntime;
     readonly sessionRepository: PiSessionRepository;
     readonly threadCatalog: PiThreadCatalog;
   }) {
+    this.#home = options.home;
     this.#modelCatalog = options.modelCatalog;
     this.#modelRuntime = options.modelRuntime;
     this.#sessionRepository = options.sessionRepository;
     this.#threadCatalog = options.threadCatalog;
+    if (this.#home) {
+      this.#ownerTimer = setInterval(() => {
+        void this.#refreshOwners();
+      }, 1000);
+      this.#ownerTimer.unref();
+    }
   }
 
   close(): void {
+    this.#closed = true;
+    clearInterval(this.#ownerTimer);
     for (const loaded of this.#loaded.values()) {
       loaded.session.dispose();
+      if (!loaded.active) {
+        void PiLiveSessionManager.#releaseLease(loaded);
+      }
     }
     this.#loaded.clear();
+    for (const owner of this.#owners.values()) {
+      owner.close();
+    }
+    this.#owners.clear();
+    this.#subscribers.clear();
   }
 
   isWorking(threadId: string): boolean {
     const loaded = this.#loaded.get(threadId);
-    return loaded?.active !== undefined || loaded?.session.isStreaming === true;
+    return (
+      this.#owners.get(threadId)?.snapshot.turn?.status === "inProgress" ||
+      loaded?.active !== undefined ||
+      loaded?.session.isStreaming === true
+    );
   }
 
   unload(threadId: string): void {
-    this.#loaded.get(threadId)?.session.dispose();
+    const loaded = this.#loaded.get(threadId);
+    loaded?.session.dispose();
+    if (loaded && !loaded.active) {
+      void PiLiveSessionManager.#releaseLease(loaded);
+    }
     this.#loaded.delete(threadId);
+  }
+
+  static async #releaseLease(loaded: LoadedSession): Promise<void> {
+    const { release } = loaded;
+    loaded.release = undefined;
+    try {
+      await release?.();
+    } catch (error) {
+      appServerLogger.warn(
+        error instanceof Error
+          ? error
+          : new Error("Pi session lease release failed")
+      );
+    }
   }
 
   async start(params: ThreadStartParams): Promise<ThreadStartResponse> {
@@ -370,40 +263,252 @@ export class PiLiveSessionManager {
     const sessionManager = params.ephemeral
       ? SessionManager.inMemory(cwd)
       : SessionManager.create(cwd);
-    const { session } = await createAgentSession({
-      cwd,
-      model,
-      modelRuntime: this.#modelRuntime.modelRuntime,
-      sessionManager,
-    });
-    this.#loaded.set(session.sessionId, { session });
-    const thread = await this.#threadFor(session, params.threadSource);
-    return PiLiveSessionManager.#startResponse(session, thread);
+    const release = this.#home
+      ? await acquireSessionLease(this.#home, sessionManager.getSessionId())
+      : undefined;
+    try {
+      const { session } = await createAgentSession({
+        cwd,
+        model,
+        modelRuntime: this.#modelRuntime.modelRuntime,
+        sessionManager,
+      });
+      this.#loaded.set(session.sessionId, { release, session });
+      const thread = await this.#threadFor(session, params.threadSource);
+      return PiLiveSessionManager.#startResponse(session, thread);
+    } catch (error) {
+      await release?.();
+      throw error;
+    }
+  }
+
+  async #refreshOwners(): Promise<void> {
+    await Promise.all(
+      [...this.#subscribers.keys()].map(async (threadId) => {
+        if (
+          this.#closed ||
+          this.#owners.has(threadId) ||
+          this.#connectingOwners.has(threadId)
+        ) {
+          return;
+        }
+        try {
+          const owner = await this.attachOwner(threadId);
+          const turn = owner?.snapshot.turn;
+          if (
+            !turn ||
+            !this.#subscribers.has(threadId) ||
+            (turn.status !== "inProgress" &&
+              this.#lastDeliveredTurn.get(threadId) === turn.id)
+          ) {
+            return;
+          }
+          const notifier = this.#notifier(threadId);
+          notifier.notify("turn/started", {
+            threadId,
+            turn: { ...structuredClone(turn), status: "inProgress" },
+          });
+          for (const item of turn.items) {
+            notifier.notify("item/started", {
+              item,
+              startedAtMs: Date.now(),
+              threadId,
+              turnId: turn.id,
+            });
+            if (turn.status !== "inProgress") {
+              notifier.notify("item/completed", {
+                completedAtMs: Date.now(),
+                item,
+                threadId,
+                turnId: turn.id,
+              });
+            }
+          }
+          if (turn.status !== "inProgress") {
+            this.#lastDeliveredTurn.set(threadId, turn.id);
+            notifier.notify("turn/completed", { threadId, turn });
+          }
+        } catch (error) {
+          appServerLogger.debug(
+            error instanceof Error
+              ? error.message
+              : "Pi owner reconnect failed",
+            { threadId }
+          );
+        }
+      })
+    );
+  }
+
+  async attachOwner(threadId: string): Promise<SessionOwnerClient | undefined> {
+    if (this.#closed) {
+      return undefined;
+    }
+    const existing = this.#owners.get(threadId);
+    if (existing || !this.#home) {
+      return existing;
+    }
+    const pending = this.#connectingOwners.get(threadId);
+    if (pending) {
+      return await pending;
+    }
+    const generation = Symbol(threadId);
+    this.#ownerGeneration.set(threadId, generation);
+    const task = SessionOwnerClient.connect(
+      this.#home,
+      threadId,
+      (notification) => {
+        if (
+          notification.method === "turn/completed" &&
+          this.#subscribers.has(threadId)
+        ) {
+          this.#lastDeliveredTurn.set(threadId, notification.params.turn.id);
+        }
+        const notifier = this.#notifier(threadId);
+        notifier.notify(notification.method, notification.params);
+      },
+      () => {
+        if (this.#ownerGeneration.get(threadId) !== generation) {
+          return;
+        }
+        const snapshot = this.#owners.get(threadId)?.snapshot;
+        this.#owners.delete(threadId);
+        if (snapshot?.turn?.status === "inProgress") {
+          const turn = structuredClone(snapshot.turn);
+          turn.status = "failed";
+          turn.completedAt = Math.floor(Date.now() / 1000);
+          turn.error = {
+            additionalDetails: null,
+            codexErrorInfo: null,
+            message:
+              "Pi session owner disconnected. Reconnect to inspect the persisted result before retrying.",
+          };
+          this.#lostOwners.set(threadId, {
+            historyTurnCount: snapshot.historyTurnCount,
+            turn,
+          });
+          this.#notifier(threadId).notify("turn/completed", { threadId, turn });
+        }
+      }
+    );
+    this.#connectingOwners.set(threadId, task);
+    try {
+      const owner = await task;
+      if (this.#closed) {
+        owner?.close();
+        return undefined;
+      }
+      if (owner) {
+        this.#lostOwners.delete(threadId);
+        this.#owners.set(threadId, owner);
+      }
+      return owner;
+    } finally {
+      this.#connectingOwners.delete(threadId);
+    }
   }
 
   async resume(threadId: string): Promise<LoadedSession | undefined> {
+    const pending = this.#loading.get(threadId);
+    if (pending) {
+      return await pending;
+    }
+    const task = this.#resume(threadId);
+    this.#loading.set(threadId, task);
+    try {
+      return await task;
+    } finally {
+      this.#loading.delete(threadId);
+    }
+  }
+
+  async #resume(threadId: string): Promise<LoadedSession | undefined> {
     const existing = this.#loaded.get(threadId);
     if (existing) {
       return existing;
     }
-    const sessionManager = await this.#sessionRepository.load(threadId);
-    if (!sessionManager) {
-      return undefined;
+    if (await this.attachOwner(threadId)) {
+      throw new Error(`Pi TUI owns thread: ${threadId}`);
     }
-    const { session } = await createAgentSession({
-      cwd: sessionManager.getCwd(),
-      modelRuntime: this.#modelRuntime.modelRuntime,
-      sessionManager,
-    });
-    const loaded = { session };
-    this.#loaded.set(threadId, loaded);
-    return loaded;
+    const nativeSessions = this.#home
+      ? await readPiPresence(this.#home)
+      : undefined;
+    if (nativeSessions?.has(threadId)) {
+      throw new Error(
+        "Pi TUI is open without a bridge. Run /reload in that TUI before sending remotely."
+      );
+    }
+    const release = this.#home
+      ? await acquireSessionLease(this.#home, threadId)
+      : undefined;
+    try {
+      const sessionManager = await this.#sessionRepository.load(threadId);
+      if (!sessionManager) {
+        await release?.();
+        return undefined;
+      }
+      const { session } = await createAgentSession({
+        cwd: sessionManager.getCwd(),
+        modelRuntime: this.#modelRuntime.modelRuntime,
+        sessionManager,
+      });
+      const loaded = { release, session };
+      this.#loaded.set(threadId, loaded);
+      return loaded;
+    } catch (error) {
+      await release?.();
+      throw error;
+    }
   }
 
   async startTurn(
     params: TurnStartParams,
     connection: JsonRpcConnection
   ): Promise<Turn> {
+    if (this.#starting.has(params.threadId)) {
+      throw new Error(`Thread is already running: ${params.threadId}`);
+    }
+    this.#starting.add(params.threadId);
+    try {
+      return await this.#startTurn(params, connection);
+    } catch (error) {
+      const loaded = this.#loaded.get(params.threadId);
+      if (loaded?.release && !loaded.active && !loaded.session.isStreaming) {
+        loaded.session.dispose();
+        await PiLiveSessionManager.#releaseLease(loaded);
+        this.#loaded.delete(params.threadId);
+      }
+      throw error;
+    } finally {
+      this.#starting.delete(params.threadId);
+    }
+  }
+
+  async #startTurn(
+    params: TurnStartParams,
+    connection: JsonRpcConnection
+  ): Promise<Turn> {
+    this.rebindConnection(params.threadId, connection);
+    const owner = await this.attachOwner(params.threadId);
+    if (owner) {
+      const result = await owner.request({
+        id: randomUUID(),
+        method: "turn/start",
+        params,
+      });
+      const notification = parseServerNotification(
+        parseCodexWireMessage(
+          JSON.stringify({
+            method: "turn/started",
+            params: { threadId: params.threadId, turn: result },
+          })
+        )
+      );
+      if (notification.method !== "turn/started") {
+        throw new Error("Invalid Pi owner turn response");
+      }
+      return notification.params.turn;
+    }
     const loaded = await this.resume(params.threadId);
     if (!loaded) {
       throw new Error(`Thread not found: ${params.threadId}`);
@@ -426,7 +531,7 @@ export class PiLiveSessionManager {
     const turn = emptyTurn();
     const active: ActiveTurn = {
       agentItems: new Map(),
-      connection,
+      connection: this.#notifier(params.threadId),
       historyTurnCount: projectPiConversation(
         loaded.session.sessionManager.getBranch(),
         loaded.session.sessionManager.getCwd()
@@ -448,25 +553,78 @@ export class PiLiveSessionManager {
       id: randomUUID(),
       type: "userMessage",
     };
-    connection.notify("turn/started", { threadId: params.threadId, turn });
+    active.connection.notify("turn/started", {
+      threadId: params.threadId,
+      turn,
+    });
     notifyItemStarted(active, userItem);
     notifyItemCompleted(active, userItem);
-    loaded.completion = PiLiveSessionManager.#runPrompt(
-      loaded,
-      active,
-      params.input
-    );
+    loaded.completion = this.#runPrompt(loaded, active, params.input);
     return turn;
   }
 
   rebindConnection(threadId: string, connection: JsonRpcConnection): void {
-    const active = this.#loaded.get(threadId)?.active;
-    if (active) {
-      active.connection = connection;
+    let subscribers = this.#subscribers.get(threadId);
+    if (!subscribers) {
+      subscribers = new Set();
+      this.#subscribers.set(threadId, subscribers);
+    }
+    if (connection.signal.aborted || subscribers.has(connection)) {
+      return;
+    }
+    subscribers.add(connection);
+    connection.signal.addEventListener(
+      "abort",
+      () => this.detach(threadId, connection),
+      { once: true }
+    );
+  }
+
+  detach(threadId: string, connection: JsonRpcConnection): boolean {
+    const subscribers = this.#subscribers.get(threadId);
+    const removed = subscribers?.delete(connection) ?? false;
+    if (subscribers?.size === 0) {
+      this.#subscribers.delete(threadId);
+      const owner = this.#owners.get(threadId);
+      this.#owners.delete(threadId);
+      this.#ownerGeneration.delete(threadId);
+      owner?.close();
+    }
+    return removed;
+  }
+
+  detachConnection(connection: JsonRpcConnection): void {
+    for (const threadId of this.#subscribers.keys()) {
+      this.detach(threadId, connection);
     }
   }
 
+  #notifier(threadId: string): Pick<JsonRpcConnection, "notify"> {
+    return {
+      notify: (method, params) => {
+        for (const connection of this.#subscribers.get(threadId) ?? []) {
+          connection.notify(method, structuredClone(params));
+        }
+      },
+    };
+  }
+
   withActiveTurn(thread: Thread): Thread {
+    const owner =
+      this.#owners.get(thread.id)?.snapshot ?? this.#lostOwners.get(thread.id);
+    if (owner?.turn) {
+      return {
+        ...thread,
+        status:
+          owner.turn.status === "inProgress"
+            ? { activeFlags: [], type: "active" }
+            : { type: "idle" },
+        turns: [
+          ...thread.turns.slice(0, owner.historyTurnCount),
+          structuredClone(owner.turn),
+        ],
+      };
+    }
     const active = this.#loaded.get(thread.id)?.active;
     if (!active) {
       return thread;
@@ -483,6 +641,15 @@ export class PiLiveSessionManager {
   }
 
   async interrupt(threadId: string, turnId: string): Promise<void> {
+    const owner = await this.attachOwner(threadId);
+    if (owner) {
+      await owner.request({
+        id: randomUUID(),
+        method: "turn/interrupt",
+        params: { threadId, turnId },
+      });
+      return;
+    }
     const loaded = this.#loaded.get(threadId);
     if (!(loaded?.active && loaded.active.turn.id === turnId)) {
       throw new Error(`Active turn not found: ${turnId}`);
@@ -492,7 +659,9 @@ export class PiLiveSessionManager {
   }
 
   loadedList(params: ThreadLoadedListParams): ThreadLoadedListResponse {
-    const threadIds = [...this.#loaded.keys()];
+    const threadIds = [
+      ...new Set([...this.#loaded.keys(), ...this.#owners.keys()]),
+    ];
     const offset = params.cursor ? loadedCursorSchema.parse(params.cursor) : 0;
     const limit = Math.max(params.limit ?? threadIds.length, 1);
     const data = threadIds.slice(offset, offset + limit);
@@ -504,7 +673,78 @@ export class PiLiveSessionManager {
     };
   }
 
+  async setName(threadId: string, name: string): Promise<void> {
+    const owner = await this.attachOwner(threadId);
+    if (owner) {
+      await owner.request({
+        id: randomUUID(),
+        method: "thread/name/set",
+        params: { name, threadId },
+      });
+      return;
+    }
+    const native = this.#home ? await readPiPresence(this.#home) : undefined;
+    if (native?.has(threadId)) {
+      throw new Error("Reload the Pi TUI before renaming its session remotely");
+    }
+    const loaded = this.#loaded.get(threadId);
+    const release =
+      !loaded && this.#home
+        ? await acquireSessionLease(this.#home, threadId)
+        : undefined;
+    try {
+      const manager =
+        loaded?.session.sessionManager ??
+        (await this.#sessionRepository.load(threadId));
+      if (!manager) {
+        throw new Error(`Thread not found: ${threadId}`);
+      }
+      manager.appendSessionInfo(name);
+      this.#notifier(threadId).notify("thread/name/updated", {
+        threadId,
+        threadName: name || undefined,
+      });
+    } finally {
+      await release?.();
+    }
+  }
+
+  async deletionLease(threadId: string): Promise<() => Promise<void>> {
+    await this.attachOwner(threadId);
+    const native = this.#home ? await readPiPresence(this.#home) : undefined;
+    if (this.#owners.has(threadId) || native?.has(threadId)) {
+      throw new Error("Close the Pi TUI before deleting its session");
+    }
+    if (this.isWorking(threadId) || this.#starting.has(threadId)) {
+      throw new Error(`Thread is already running: ${threadId}`);
+    }
+    return !this.#loaded.has(threadId) && this.#home
+      ? await acquireSessionLease(this.#home, threadId)
+      : () => Promise.resolve();
+  }
+
   async compact(threadId: string): Promise<void> {
+    if (this.#starting.has(threadId)) {
+      throw new Error(`Thread is already running: ${threadId}`);
+    }
+    this.#starting.add(threadId);
+    try {
+      await this.#compact(threadId);
+    } finally {
+      this.#starting.delete(threadId);
+    }
+  }
+
+  async #compact(threadId: string): Promise<void> {
+    const owner = await this.attachOwner(threadId);
+    if (owner) {
+      await owner.request({
+        id: randomUUID(),
+        method: "thread/compact/start",
+        params: { threadId },
+      });
+      return;
+    }
     const loaded = await this.resume(threadId);
     if (!loaded) {
       throw new Error(`Thread not found: ${threadId}`);
@@ -512,10 +752,23 @@ export class PiLiveSessionManager {
     if (loaded.active || loaded.session.isStreaming) {
       throw new Error(`Thread is already running: ${threadId}`);
     }
-    await loaded.session.compact();
+    try {
+      await loaded.session.compact();
+    } finally {
+      if (loaded.release) {
+        loaded.session.dispose();
+        await PiLiveSessionManager.#releaseLease(loaded);
+        this.#loaded.delete(threadId);
+      }
+    }
   }
 
   async steer(params: TurnSteerParams): Promise<TurnSteerResponse> {
+    const owner = await this.attachOwner(params.threadId);
+    if (owner) {
+      await owner.request({ id: randomUUID(), method: "turn/steer", params });
+      return { turnId: params.expectedTurnId };
+    }
     const loaded = this.#loaded.get(params.threadId);
     const active = loaded?.active;
     if (!(loaded && active && active.turn.id === params.expectedTurnId)) {
@@ -536,7 +789,7 @@ export class PiLiveSessionManager {
     return { turnId: active.turn.id };
   }
 
-  static async #runPrompt(
+  async #runPrompt(
     loaded: LoadedSession,
     active: ActiveTurn,
     input: readonly UserInput[]
@@ -566,6 +819,12 @@ export class PiLiveSessionManager {
       active.turn.completedAt = Math.floor(Date.now() / 1000);
       active.turn.durationMs = Date.now() - active.startedAtMs;
       loaded.active = undefined;
+      if (loaded.release) {
+        loaded.session.dispose();
+        await loaded.release();
+        this.#loaded.delete(active.threadId);
+        loaded.release = undefined;
+      }
       active.connection.notify("turn/completed", {
         threadId: active.threadId,
         turn: active.turn,

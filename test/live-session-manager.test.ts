@@ -1,5 +1,9 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Replace the Pi session creation boundary to exercise turn lifecycle without providers, credentials, or user extensions. */
 
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import {
   AgentSession,
   SessionManager,
@@ -14,8 +18,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppServerConfig } from "../src/config/app-server-config.js";
 import { appServerLogger } from "../src/logging/app-server-logger.js";
 import { PiLiveSessionManager } from "../src/pi/live-session-manager.js";
+import { emptyTurn } from "../src/pi/live-turn.js";
 import { PiModelCatalog } from "../src/pi/model-catalog.js";
 import { PiModelRuntime } from "../src/pi/pi-model-runtime.js";
+import { SessionOwnerHost } from "../src/pi/session-owner-host.js";
 import { PiSessionRepository } from "../src/pi/session-repository.js";
 import { PiThreadCatalog } from "../src/pi/thread-catalog.js";
 import { JsonRpcConnection } from "../src/protocol/json-rpc-connection.js";
@@ -56,7 +62,7 @@ const createConnection = (
     }),
   });
 
-const fixture = () => {
+const fixture = (home?: string) => {
   const database = new MetadataDatabase(":memory:");
   databases.push(database);
   const modelRuntime: PiModelRuntime = Object.create(PiModelRuntime.prototype);
@@ -66,6 +72,7 @@ const fixture = () => {
   vi.spyOn(sessionRepository, "load").mockResolvedValue(sessionManager);
   const threadCatalog = new PiThreadCatalog({ database, sessionRepository });
   const manager = new PiLiveSessionManager({
+    home,
     modelCatalog,
     modelRuntime,
     sessionRepository,
@@ -155,6 +162,133 @@ describe("Pi live turn lifecycle", () => {
     }
     vi.restoreAllMocks();
     mocks.createSession.mockReset();
+  });
+
+  it("delegates to the TUI owner without creating a second SDK runtime", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "pi-owner-manager-"));
+    const f = fixture(home);
+    const turn = emptyTurn();
+    const host = new SessionOwnerHost({
+      handle: () => {
+        host.publish({
+          method: "turn/started",
+          params: { threadId: "thread", turn },
+        });
+        return Promise.resolve(turn);
+      },
+      home,
+      snapshot: () => ({ historyTurnCount: 0, turn }),
+      threadId: "thread",
+    });
+    const otherNotifications: ServerNotification[] = [];
+    const other = createConnection(otherNotifications);
+    try {
+      await host.start();
+      f.manager.rebindConnection("thread", other);
+      await expect(
+        f.manager.startTurn({ input: [], threadId: "thread" }, f.connection)
+      ).resolves.toMatchObject({ id: turn.id });
+      await vi.waitFor(() =>
+        expect(otherNotifications.at(-1)?.method).toBe("turn/started")
+      );
+      expect(mocks.createSession).not.toHaveBeenCalled();
+      expect(f.prompt).not.toHaveBeenCalled();
+      expect(f.manager.isWorking("thread")).toBeTruthy();
+    } finally {
+      f.manager.close();
+      await host.stop();
+      await rm(home, { force: true, recursive: true });
+    }
+  });
+
+  it("reconnects a subscribed client after the TUI owner channel is replaced", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "pi-replaced-owner-"));
+    const f = fixture(home);
+    const turn = emptyTurn();
+    turn.items.push({
+      delivery: null,
+      id: "reply",
+      memoryCitation: null,
+      phase: null,
+      text: "recovered reply",
+      type: "agentMessage",
+    });
+    let host = new SessionOwnerHost({
+      handle: () => Promise.resolve(turn),
+      home,
+      snapshot: () => ({ historyTurnCount: 0, turn }),
+      threadId: "thread",
+    });
+    try {
+      await host.start();
+      f.manager.rebindConnection("thread", f.connection);
+      await f.manager.attachOwner("thread");
+      await host.stop();
+      await vi.waitFor(() =>
+        expect(f.notifications.at(-1)?.method).toBe("turn/completed")
+      );
+      turn.status = "completed";
+      host = new SessionOwnerHost({
+        handle: () => Promise.resolve(turn),
+        home,
+        snapshot: () => ({ historyTurnCount: 0, turn }),
+        threadId: "thread",
+      });
+      await host.start();
+      await vi.waitFor(
+        () =>
+          expect(f.notifications.at(-1)).toMatchObject({
+            method: "turn/completed",
+            params: { turn: { id: turn.id, status: "completed" } },
+          }),
+        { timeout: 2500 }
+      );
+      expect(f.notifications).toContainEqual(
+        expect.objectContaining({
+          method: "item/completed",
+          params: expect.objectContaining({
+            item: expect.objectContaining({
+              id: "reply",
+              text: "recovered reply",
+            }),
+          }),
+        })
+      );
+      expect(mocks.createSession).not.toHaveBeenCalled();
+    } finally {
+      f.manager.close();
+      await host.stop();
+      await rm(home, { force: true, recursive: true });
+    }
+  });
+
+  it("blocks remote writes to an older TUI that has not loaded its owner channel", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "pi-old-owner-"));
+    const f = fixture(home);
+    try {
+      await mkdir(path.join(home, "presence"));
+      await writeFile(
+        path.join(home, "presence", "tui.json"),
+        JSON.stringify({
+          pid: process.pid,
+          threadId: "thread",
+          touchedAt: Date.now(),
+        })
+      );
+      await expect(
+        f.manager.startTurn({ input: [], threadId: "thread" }, f.connection)
+      ).rejects.toThrow("Run /reload");
+      await expect(f.manager.deletionLease("thread")).rejects.toThrow(
+        "Close the Pi TUI"
+      );
+      await expect(f.manager.setName("thread", "name")).rejects.toThrow(
+        "Reload the Pi TUI"
+      );
+      expect(mocks.createSession).not.toHaveBeenCalled();
+    } finally {
+      f.manager.close();
+      await rm(home, { force: true, recursive: true });
+    }
   });
 
   it("starts, reads, resumes, and runs a new thread before Pi persists its history", async () => {
@@ -282,6 +416,31 @@ describe("Pi live turn lifecycle", () => {
     });
   });
 
+  it("releases daemon ownership when turn preflight rejects the selected model", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "pi-rejected-preflight-"));
+    const f = fixture(home);
+    Object.defineProperty(f.session, "dispose", {
+      value: vi.fn<AgentSession["dispose"]>(),
+    });
+    vi.spyOn(f.modelCatalog, "resolve").mockImplementation(
+      vi.fn<PiModelCatalog["resolve"]>()
+    );
+    try {
+      await expect(
+        f.manager.startTurn(
+          { input: [], model: "missing/model", threadId: "thread" },
+          f.connection
+        )
+      ).rejects.toThrow("Unknown Pi model");
+      const release = await f.manager.deletionLease("thread");
+      await release();
+      expect(f.manager.loadedList({}).data).toStrictEqual([]);
+    } finally {
+      f.manager.close();
+      await rm(home, { force: true, recursive: true });
+    }
+  });
+
   it("reports prompt rejection as failed with its error", async () => {
     const { completion, connection, manager, notifications, unsubscribe } =
       fixture();
@@ -363,7 +522,7 @@ describe("Pi live turn lifecycle", () => {
     );
   });
 
-  it("delivers completion to the resumed connection and permits the next turn", async () => {
+  it("delivers completion to both attached connections and permits the next turn", async () => {
     const { completion, connection, manager, notifications } = fixture();
     await manager.startTurn({ input: [], threadId: "thread" }, connection);
     const resumedNotifications: ServerNotification[] = [];
@@ -379,10 +538,28 @@ describe("Pi live turn lifecycle", () => {
       notifications.some(
         (notification) => notification.method === "turn/completed"
       )
-    ).toBeFalsy();
+    ).toBeTruthy();
     await expect(
       manager.startTurn({ input: [], threadId: "thread" }, resumed)
     ).resolves.toMatchObject({ status: "inProgress" });
+  });
+
+  it("keeps other subscribers attached when one disconnects", async () => {
+    const f = fixture();
+    const otherNotifications: ServerNotification[] = [];
+    const other = createConnection(otherNotifications);
+    await f.manager.startTurn({ input: [], threadId: "thread" }, f.connection);
+    f.manager.rebindConnection("thread", other);
+    f.connection.close();
+    f.completion.resolve();
+    await vi.waitFor(() =>
+      expect(otherNotifications.at(-1)?.method).toBe("turn/completed")
+    );
+    expect(
+      f.notifications.some(
+        (notification) => notification.method === "turn/completed"
+      )
+    ).toBeFalsy();
   });
 
   it("resumes a live turn with stable item IDs after events hit a closed stream", async () => {

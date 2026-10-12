@@ -27,6 +27,7 @@ export const createAppServer = async (
     sessionRepository,
   });
   const liveSessionManager = new PiLiveSessionManager({
+    home: config.paths.home,
     modelCatalog,
     modelRuntime: piModelRuntime,
     sessionRepository,

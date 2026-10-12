@@ -15,11 +15,13 @@ This is an adapter, not a Codex reimplementation. Pi still picks the models, run
 - **One credential.** Pi owns the OpenAI OAuth token. This server borrows it and routes logout back through Pi, so two stores never rotate the same refresh token.
 - **Explicit protocol support.** Implemented methods return results validated against the official Codex JSON Schemas. Unsupported actions return `Method not implemented`, rather than a fabricated success.
 - **Host operations and forks.** Desktop filesystem queries read the host filesystem. Non-PTY processes report output and exit through the Codex process protocol. Forks copy the selected Pi conversation branch into a new session without changing the source. Ephemeral forks and PTY processes return an explicit unsupported error.
+- **Live session bridge.** An open Pi TUI owns its session. Codex commands run in that TUI, and local input, remote input, reasoning, replies, and tool lifecycle events go to every attached client. Reconnecting clients receive the current turn with stable item IDs.
 - **Controlled from inside Pi.** A `/codex-server` command starts, stops, inspects, and pairs the daemon without leaving the TUI.
 
 ## How it works
 
 ```mermaid
+%%{init: {"theme": "dark"}}%%
 flowchart LR
     CLI[Codex CLI / IDE]
     IOS[ChatGPT iOS app]
@@ -36,11 +38,17 @@ flowchart LR
     CLI -->|JSON-RPC over stdio or ws| DAEMON
     IOS --> RELAY --> DAEMON
     TUI -->|start / stop / pair| DAEMON
-    DAEMON --> PI --> JSONL
+    DAEMON <-->|commands / live events| TUI
+    TUI -->|TUI-owned session| JSONL
+    DAEMON --> PI -->|daemon-owned session| JSONL
     DAEMON --> DB
 ```
 
-The daemon accepts Codex JSON-RPC connections and dials out to the Remote Control relay at the same time, so a paired phone and a local Codex client share the same sessions. A Pi session only ever has one writer, and today that writer is the daemon. The lease table in SQLite is there for the next step, handing ownership to an active Pi TUI so the two never rewrite the same JSONL at once. See [ADR 0009](docs/adr/0009-use-a-single-writer-for-shared-sessions.md).
+The daemon accepts Codex JSON-RPC connections and dials out to the Remote Control relay at the same time. Each attached client subscribes to the same session events. The control extension exposes an authenticated loopback channel for its live Pi TUI. The daemon delegates start, steer, interrupt, and compaction commands to that owner instead of opening another SDK runtime. Without a live TUI, the daemon acquires the session lease before loading Pi history, then releases it after execution. See [ADR 0009](docs/adr/0009-use-a-single-writer-for-shared-sessions.md).
+
+After updating the package, run `/reload` in an idle Pi TUI to register its owner channel. Resume the same Pi session ID in Codex. A fork creates a separate conversation and does not mirror the source. An older TUI with presence but no owner channel blocks remote writes until reloaded. Closing a Codex client leaves the Pi run active. Losing the owner reports a failed remote turn and requires inspecting the persisted result before retrying; the bridge does not automatically repeat an uncertain command.
+
+Two TUI processes cannot acquire the same session lease. A TUI that cannot acquire it exits before accepting input. Close the owning TUI before deleting its session remotely. Extension dialogs delegated to a TUI remain there, as described in [ADR 0016](docs/adr/0016-keep-delegated-extension-dialogs-on-the-tui.md).
 
 ## Getting started
 
