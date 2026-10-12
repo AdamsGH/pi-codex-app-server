@@ -126,6 +126,12 @@ describe("Codex Server extension experience", () => {
       expect.stringContaining("Current Pi session: pi-session-1"),
       "info"
     );
+    expect(notify).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "codex --remote 'ws://127.0.0.1:4242/' resume 'pi-session-1'"
+      ),
+      "info"
+    );
   });
 
   it("shows QR and manual pairing options in an overlay", async () => {

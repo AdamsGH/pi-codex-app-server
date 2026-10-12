@@ -102,7 +102,7 @@ Then point any Codex-compatible client at it and let the client own stdio:
 pi-codex-app-server app-server
 ```
 
-Or attach to the shared daemon over WebSocket. `/codex-server status` prints the URL, and it is also in `endpoint.json`.
+Or attach to the shared daemon over WebSocket. `/codex-server status` prints a ready-to-run `codex --remote <URL> resume <session ID>` command for the current Pi session. The URL is also in `endpoint.json`.
 
 ## The `/codex-server` command
 
@@ -110,7 +110,7 @@ Or attach to the shared daemon over WebSocket. `/codex-server status` prints the
 | --- | --- |
 | `start` | Spawn the daemon if it is not already running, then wait for it to be reachable |
 | `stop` | `SIGTERM` the daemon and remove the endpoint file |
-| `status` | Default. PID, WebSocket URL, start time, autostart and Remote Control flags, current Pi session id, file paths |
+| `status` | Default. PID, WebSocket URL, start time, autostart and Remote Control flags, current Pi session id, connection command, file paths |
 | `pair` | Request a ChatGPT Remote pairing code and render it as a QR code |
 
 ## CLI

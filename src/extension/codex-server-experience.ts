@@ -66,6 +66,11 @@ const footerText = (status: DaemonStatus): string =>
     ? `Codex server: running · ${status.endpoint.url}`
     : "Codex server: stopped";
 
+const quoteShellArgument = (value: string): string =>
+  process.platform === "win32"
+    ? `'${value.replaceAll("'", "''")}'`
+    : `'${value.replaceAll("'", "'\\''")}'`;
+
 const formatStatus = (
   status: DaemonStatus,
   context: CodexServerContext,
@@ -79,7 +84,11 @@ const formatStatus = (
     `Logs: ${options.paths.logs}`,
   ];
   if (status.state === "stopped") {
-    return ["Codex App Server: stopped", ...commonLines].join("\n");
+    return [
+      "Codex App Server: stopped",
+      ...commonLines,
+      "Run /codex-server start, then /codex-server status to get the connection command.",
+    ].join("\n");
   }
   return [
     "Codex App Server: running",
@@ -87,6 +96,8 @@ const formatStatus = (
     `WebSocket: ${status.endpoint.url}`,
     `Started: ${status.endpoint.startedAt ?? "unknown"}`,
     ...commonLines,
+    "Connect Codex to this Pi session:",
+    `codex --remote ${quoteShellArgument(status.endpoint.url)} resume ${quoteShellArgument(context.sessionId)}`,
   ].join("\n");
 };
 
