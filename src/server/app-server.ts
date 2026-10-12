@@ -21,6 +21,7 @@ import type { PiLiveSessionManager } from "../pi/live-session-manager.js";
 import type { PiModelCatalog } from "../pi/model-catalog.js";
 import type { PiModelRuntime } from "../pi/pi-model-runtime.js";
 import type { PiSessionRepository } from "../pi/session-repository.js";
+import { listPiSkills } from "../pi/skill-catalog.js";
 import type { PiThreadCatalog } from "../pi/thread-catalog.js";
 import type { JsonRpcConnection } from "../protocol/json-rpc-connection.js";
 import type { MetadataDatabase } from "../storage/metadata-database.js";
@@ -95,6 +96,7 @@ export class AppServer {
   }
 
   register(connection: JsonRpcConnection): void {
+    let currentCwd = process.cwd();
     if (this.#threadCatalog.publication) {
       connection.registerInitialized(async ({ signal }) => {
         this.#trackPublication(connection, signal);
@@ -104,6 +106,9 @@ export class AppServer {
     connection.registerCompatibilityFallbacks();
     registerNeutralCompatibilityResponses(connection);
     registerHostOperations(connection);
+    connection.registerRequest("skills/list", (params) =>
+      listPiSkills(this.#config.piAgentDir, params, currentCwd)
+    );
     const { sections } = this.#threadCatalog;
     connection.registerRequest("threadSection/list", (params) =>
       sections.list(params)
@@ -330,6 +335,7 @@ export class AppServer {
         path.resolve(params.cwd ?? process.cwd())
       );
       const threadStartResponse = await this.#liveSessionManager.start(params);
+      currentCwd = threadStartResponse.cwd;
       this.#newThreads.set(threadStartResponse.thread.id, threadStartResponse);
       this.#threadCatalog.publication?.retain(
         threadStartResponse.thread.id,
@@ -350,6 +356,7 @@ export class AppServer {
       await this.#liveSessionManager.attachOwner(params.threadId);
       const pending = await this.#unpersistedThread(params.threadId);
       if (pending) {
+        currentCwd = pending.cwd;
         this.#threadCatalog.publication?.retain(
           params.threadId,
           context.signal
@@ -372,6 +379,7 @@ export class AppServer {
       }
       this.#threadCatalog.publication?.retain(params.threadId, context.signal);
       this.#liveSessionManager.rebindConnection(params.threadId, connection);
+      currentCwd = sessionManager.getCwd();
       const sessionContext = sessionManager.buildSessionContext();
       const provider = sessionContext.model?.provider ?? "pi";
       const modelId = sessionContext.model?.modelId ?? "unknown";

@@ -172,6 +172,7 @@ Built against the vendored Codex app-server protocol v2 schemas in [vendor/opena
 Implemented today:
 
 - Lifecycle: `initialize`, `initialized`, `getAuthStatus`, `account/read`, `account/logout`, `model/list`, `modelProvider/capabilities/read`
+- Skills: `skills/list` discovers installed Pi skills for the requested working directories. It honors persisted project trust and path exclusions, rescans on each request, and reports invalid skills or missing packages without installing them or executing extensions.
 - Threads: `thread/list`, `thread/read`, `thread/start`, `thread/resume`, `thread/loaded/list`, `thread/name/set`, `thread/compact/start`, `thread/archive`, `thread/unarchive`, `thread/delete`, `thread/unsubscribe`
 - Projects: `project/list`, `project/read`, `project/create`, `project/import`, `project/update`, `project/move`, `project/delete`, `thread/metadata/update` for project assignment
 - Sections: `threadSection/list`, `threadSection/create`, `threadSection/update`, `threadSection/delete`, `thread/section/move`
