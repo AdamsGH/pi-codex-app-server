@@ -1,10 +1,6 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 
-import Ajv from "ajv";
-import { generateSync } from "json-schema-faker";
-import { z } from "zod";
-
 const CLIENT_REQUEST = "ClientRequest";
 const SERVER_REQUEST = "ServerRequest";
 
@@ -12,46 +8,6 @@ interface MethodDefinition {
   readonly method: string;
   readonly responseName: string;
 }
-
-const jsonSchema = z.looseObject({});
-const jsonValueSchema = z.json();
-type GeneratedJsonValue = z.infer<typeof jsonValueSchema>;
-const ajv = new Ajv({ strict: false });
-for (const format of [
-  "double",
-  "int32",
-  "int64",
-  "uint",
-  "uint16",
-  "uint32",
-  "uint64",
-]) {
-  ajv.addFormat(format, true);
-}
-const legacyNeutralResponses = new Map<string, GeneratedJsonValue>([
-  [
-    "GetConversationSummaryResponse",
-    {
-      summary: {
-        cliVersion: "",
-        conversationId: "",
-        cwd: "",
-        gitInfo: null,
-        modelProvider: "pi",
-        path: "",
-        preview: "",
-        source: "unknown",
-        timestamp: null,
-        updatedAt: null,
-      },
-    },
-  ],
-  [
-    "GetAuthStatusResponse",
-    { authMethod: null, authToken: null, requiresOpenaiAuth: null },
-  ],
-  ["GitDiffToRemoteResponse", { diff: "", sha: "" }],
-]);
 
 const readArgument = (name: string): string => {
   const index = process.argv.indexOf(name);
@@ -155,36 +111,14 @@ const relativeImport = (output: string, importedFile: string): string => {
   return relative.startsWith(".") ? relative : `./${relative}`;
 };
 
-const generateNeutralResponse = async (
-  schemaPath: string
-): Promise<GeneratedJsonValue> => {
-  const schema = jsonSchema.parse(await Bun.file(schemaPath).json());
-  const response = jsonValueSchema.parse(
-    generateSync(schema, {
-      maxDefaultItems: 0,
-      optionalsProbability: 0,
-      seed: 1,
-      useDefaultValue: true,
-      useExamplesValue: true,
-    })
-  );
-  if (!ajv.validate(schema, response)) {
-    throw new Error(
-      `Generated response does not match ${schemaPath}: ${ajv.errorsText()}`
-    );
-  }
-  return response;
-};
-
-const renderMap = async (
+const renderMap = (
   name: string,
   requestTypeName: string,
   requestTypeImport: string,
   methods: readonly MethodDefinition[],
   responseImports: ReadonlyMap<string, string>,
-  responseSchemaImports: ReadonlyMap<string, string>,
-  responseSchemaSources: ReadonlyMap<string, string>
-): Promise<string> => {
+  responseSchemaImports: ReadonlyMap<string, string>
+): string => {
   const imports = [...new Set(methods.map(({ responseName }) => responseName))]
     .toSorted()
     .map((responseName) => {
@@ -214,20 +148,6 @@ const renderMap = async (
   const schemaEntries = methodsWithSchemas.map(
     ({ method, responseName }) => `  "${method}": ${responseName}Schema,`
   );
-  const neutralEntries = await Promise.all(
-    methods.map(async ({ method, responseName }) => {
-      const schemaPath = responseSchemaSources.get(responseName);
-      if (!schemaPath) {
-        const legacyResponse = legacyNeutralResponses.get(responseName);
-        if (legacyResponse !== undefined) {
-          return `  "${method}": ${JSON.stringify(legacyResponse)},`;
-        }
-        throw new Error(`Missing response schema for ${method}`);
-      }
-      const response = await generateNeutralResponse(schemaPath);
-      return `  "${method}": ${JSON.stringify(response)},`;
-    })
-  );
   const methodNames = methods.map(({ method }) => `  "${method}",`);
   return `${imports.join("\n")}
 ${schemaImports.join("\n")}
@@ -256,9 +176,6 @@ export const ${name}ResponseSchemas = {
 ${schemaEntries.join("\n")}
 } as const;
 
-export const ${name}NeutralResponses = {
-${neutralEntries.join("\n")}
-} satisfies Record<keyof ${name}Responses, unknown>;
 `;
 };
 
@@ -276,9 +193,6 @@ const main = async (): Promise<void> => {
     ])
   );
   const responseSchemaFiles = await listFiles(schemaDirectory, ".json");
-  const responseSchemaSources = new Map(
-    responseSchemaFiles.map((file) => [path.basename(file, ".json"), file])
-  );
   const schemaFiles = new Map(
     responseSchemaFiles.map((file) => [
       path.basename(file, ".json"),
@@ -303,14 +217,13 @@ const main = async (): Promise<void> => {
         `${requestTypeName} has ${generatedMethods.size} methods, but ${definitions.length} responses were mapped`
       );
     }
-    return await renderMap(
+    return renderMap(
       mapName,
       requestTypeName,
       relativeImport(outputPath, requestFile),
       definitions,
       responseFiles,
-      schemaFiles,
-      responseSchemaSources
+      schemaFiles
     );
   };
 
@@ -325,7 +238,7 @@ const main = async (): Promise<void> => {
     SERVER_REQUEST
   );
   const header = `// GENERATED CODE! DO NOT MODIFY BY HAND!\n// Source: openai/codex app-server-protocol at the commit recorded in UPSTREAM.md.\n\n`;
-  await Bun.write(outputPath, `${header}${client}\n${server}`);
+  await Bun.write(outputPath, `${`${header}${client}\n${server}`.trimEnd()}\n`);
 };
 
 await main();

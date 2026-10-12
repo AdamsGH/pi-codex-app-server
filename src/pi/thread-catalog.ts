@@ -1,3 +1,4 @@
+import { VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
 import type { SessionInfo } from "@earendil-works/pi-coding-agent";
 import { orderBy } from "es-toolkit";
 import { z } from "zod";
@@ -54,21 +55,26 @@ const projectThread = (
     agentNickname: null,
     agentRole: null,
     canAcceptDirectInput: null,
-    cliVersion: "pi-0.84",
+    cliVersion: `pi-${PI_VERSION}`,
     createdAt,
     cwd: session.cwd,
+    daybreakEnabled: null,
+    environments: null,
     ephemeral: false,
     extra: null,
     forkedFromId: null,
     gitInfo: null,
     historyMode: "legacy",
     id: session.id,
+    model: null,
     modelProvider,
     name: session.name ?? null,
+    originator: null,
     parentThreadId: null,
     path: session.path,
     preview: session.firstMessage,
     projectId: metadata?.projectId ?? null,
+    reasoningEffort: null,
     recencyAt: updatedAt,
     section: null,
     sectionEnteredAt: null,
@@ -199,6 +205,10 @@ export class PiThreadCatalog {
     );
     const { position: _position, ...section } = this.sections.get(threadId);
     Object.assign(thread, section);
+    thread.model = sessionContext?.model
+      ? `${encodeURIComponent(sessionContext.model.provider)}/${encodeURIComponent(sessionContext.model.modelId)}`
+      : null;
+    thread.reasoningEffort = sessionContext?.thinkingLevel ?? null;
     thread.forkedFromId = session.parentSessionPath
       ? (this.#database
           .listThreads()

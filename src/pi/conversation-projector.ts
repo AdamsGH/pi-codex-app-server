@@ -74,6 +74,7 @@ const createTurn = (entry: SessionEntry): MutableTurnState => {
       id: entry.id,
       items: [],
       itemsView: "full",
+      rootTurnId: null,
       startedAt,
       status: "inProgress",
     },
@@ -93,6 +94,7 @@ const appendAssistantMessage = (
         id,
         memoryCitation: null,
         phase: null,
+        questions: null,
         text: content.text,
         type: "agentMessage",
       });
@@ -127,6 +129,7 @@ const appendAssistantMessage = (
       additionalDetails: null,
       codexErrorInfo: null,
       message: message.errorMessage ?? "Pi model request failed",
+      misalignment: null,
     };
     state.turn.status = "failed";
   } else if (message.stopReason !== "toolUse") {
@@ -216,6 +219,7 @@ const appendMessage = (
         id: entry.id,
         memoryCitation: null,
         phase: null,
+        questions: null,
         text: customMessageText(message),
         type: "agentMessage",
       });
@@ -228,6 +232,7 @@ const appendMessage = (
         id: entry.id,
         memoryCitation: null,
         phase: null,
+        questions: null,
         text: message.summary,
         type: "agentMessage",
       });
@@ -294,6 +299,7 @@ export const projectPiConversation = (
         id: entry.id,
         memoryCitation: null,
         phase: null,
+        questions: null,
         text: entry.summary,
         type: "agentMessage",
       });

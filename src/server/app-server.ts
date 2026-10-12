@@ -31,7 +31,6 @@ import { registerNeutralCompatibilityResponses } from "./neutral-compatibility-r
 const readModelProviderCapabilities =
   (): ModelProviderCapabilitiesReadResponse => ({
     imageGeneration: false,
-    namespaceTools: false,
     webSearch: false,
   });
 
@@ -234,6 +233,7 @@ export class AppServer {
         ? { email: null, planType: "unknown", type: "chatgpt" }
         : null,
       requiresOpenaiAuth: false,
+      workspaceRouting: null,
     });
     connection.registerRequest("account/read", readAccount);
     connection.registerRequest("getAuthStatus", (params, context) =>
@@ -316,15 +316,30 @@ export class AppServer {
       const entries = thread.turns
         .filter((turn) => !params.turnId || turn.id === params.turnId)
         .flatMap((turn) =>
-          turn.items.map((item) => ({ item, turnId: turn.id }))
+          turn.items.map((item) => ({
+            completedAtMs: null,
+            item,
+            startedAtMs: null,
+            turnId: turn.id,
+          }))
         );
+      // oxlint-disable anti-slop/no-runtime-typeof -- The official request schema has already validated this string-or-anchor union.
+      const anchor =
+        typeof params.cursor === "object" && params.cursor !== null
+          ? params.cursor
+          : undefined;
+      if (anchor && !params.turnId) {
+        throw new Error("An item anchor requires a nonempty turnId");
+      }
       return paginateHistory(entries, {
-        cursor: params.cursor,
+        anchor: anchor ? `${params.turnId}:${anchor.itemId}` : undefined,
+        cursor: typeof params.cursor === "string" ? params.cursor : null,
         direction: params.sortDirection ?? "asc",
         key: (entry) => `${entry.turnId}:${entry.item.id}`,
         limit: params.limit,
         scope: `items:${params.threadId}:${params.turnId ?? "all"}`,
       });
+      // oxlint-enable anti-slop/no-runtime-typeof
     });
 
     const startThread = async (
@@ -364,6 +379,7 @@ export class AppServer {
         this.#liveSessionManager.rebindConnection(params.threadId, connection);
         return {
           ...pending,
+          collaborationMode: null,
           initialTurnsPage: null,
           itemsBackwardsCursor: null,
           thread: this.#liveSessionManager.withActiveTurn(pending.thread),
@@ -387,7 +403,9 @@ export class AppServer {
         activePermissionProfile: null,
         approvalPolicy: "never" as const,
         approvalsReviewer: "user" as const,
+        collaborationMode: null,
         cwd: sessionManager.getCwd(),
+        disabledPluginIds: [],
         initialTurnsPage: null,
         instructionSources: [],
         itemsBackwardsCursor: null,

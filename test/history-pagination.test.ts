@@ -3,6 +3,35 @@ import { describe, expect, test } from "vitest";
 import { paginateHistory } from "../src/pi/history-pagination.js";
 
 describe("History pagination", () => {
+  test("starts exclusively from an item anchor in either direction and continues with an opaque cursor", () => {
+    const items = ["one", "two", "three", "four"];
+    const options = { key: (item: string) => item, limit: 1, scope: "turn" };
+    const page = paginateHistory(items, {
+      ...options,
+      anchor: "two",
+      direction: "asc",
+    });
+    expect(page.data).toStrictEqual(["three"]);
+    expect(
+      paginateHistory(items, {
+        ...options,
+        cursor: page.nextCursor,
+        direction: "asc",
+      }).data
+    ).toStrictEqual(["four"]);
+    expect(
+      paginateHistory(items, { ...options, anchor: "three", direction: "desc" })
+        .data
+    ).toStrictEqual(["two"]);
+    expect(() =>
+      paginateHistory(items, {
+        ...options,
+        anchor: "missing",
+        direction: "asc",
+      })
+    ).toThrow("History anchor not found");
+  });
+
   test("continues from a stable anchor after a newer turn arrives and reverses direction inclusively", () => {
     const items = ["one", "two", "three", "four"];
     const options = {

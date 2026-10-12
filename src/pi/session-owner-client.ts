@@ -10,12 +10,17 @@ import {
   parseCodexWireMessage,
   parseServerNotification,
 } from "../protocol/validation.js";
+import {
+  migrateOwnerTurn,
+  migrateOwnerNotification,
+} from "./owner-protocol-migration.js";
 import { ownerPath, descriptorSchema, packetSchema } from "./session-owner.js";
 import type {
   OwnerSnapshot,
   OwnerRequest,
   OwnerResult,
 } from "./session-owner.js";
+import { assertSupportedPiInput } from "./user-input-support.js";
 
 export class SessionOwnerClient {
   snapshot: OwnerSnapshot = { historyTurnCount: 0, turn: null };
@@ -34,7 +39,8 @@ export class SessionOwnerClient {
   private constructor(
     socket: WebSocket,
     notify: (notification: ServerNotification) => void,
-    closed: () => void
+    closed: () => void,
+    protocolVersion: 1 | 2
   ) {
     this.#socket = socket;
     socket.on("message", (data) => {
@@ -48,7 +54,10 @@ export class SessionOwnerClient {
                   parseCodexWireMessage(
                     JSON.stringify({
                       method: "turn/started",
-                      params: { threadId: "snapshot", turn: packet.turn },
+                      params: {
+                        threadId: "snapshot",
+                        turn: migrateOwnerTurn(packet.turn, protocolVersion),
+                      },
                     })
                   )
                 );
@@ -62,7 +71,11 @@ export class SessionOwnerClient {
           this.#ready.resolve();
         } else if (packet.type === "event") {
           const notification = parseServerNotification(
-            parseCodexWireMessage(JSON.stringify(packet.notification))
+            parseCodexWireMessage(
+              JSON.stringify(
+                migrateOwnerNotification(packet.notification, protocolVersion)
+              )
+            )
           );
           this.#update(notification);
           notify(notification);
@@ -86,7 +99,13 @@ export class SessionOwnerClient {
                 parseCodexWireMessage(
                   JSON.stringify({
                     method: "turn/started",
-                    params: { threadId: "result", turn: result },
+                    params: {
+                      threadId: "result",
+                      turn: migrateOwnerTurn(
+                        z.json().parse(packet.result),
+                        protocolVersion
+                      ),
+                    },
                   })
                 )
               );
@@ -204,7 +223,12 @@ export class SessionOwnerClient {
       headers: { Authorization: `Bearer ${descriptor.token}` },
       maxPayload: 16 * 1024 * 1024,
     });
-    const client = new SessionOwnerClient(socket, notify, closed);
+    const client = new SessionOwnerClient(
+      socket,
+      notify,
+      closed,
+      descriptor.protocolVersion
+    );
     try {
       await Promise.all([once(socket, "open"), client.requestSnapshot()]);
     } catch (error) {
@@ -227,6 +251,9 @@ export class SessionOwnerClient {
   async request(request: OwnerRequest): Promise<OwnerResult> {
     if (this.#closed) {
       throw new Error("Pi session owner is disconnected");
+    }
+    if (request.method === "turn/start" || request.method === "turn/steer") {
+      assertSupportedPiInput(request.params.input);
     }
     const id = randomUUID();
     const completion = Promise.withResolvers<OwnerResult>();

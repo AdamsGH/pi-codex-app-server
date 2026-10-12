@@ -77,6 +77,7 @@ const toCodexModel = (
   return {
     additionalSpeedTiers: [],
     availabilityNux: null,
+    availableAccessPrograms: { cyber: [] },
     defaultReasoningEffort: defaultReasoningEffort(efforts),
     defaultServiceTier: null,
     description: `${model.provider} · ${model.api} · ${model.contextWindow.toLocaleString()} token context`,

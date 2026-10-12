@@ -47,6 +47,7 @@
     "check": "ultracite check",
     "db:generate": "drizzle-kit generate --output json",
     "fix": "ultracite fix",
+    "protocol:sync": "bun run ./scripts/sync-codex-protocol.ts",
     "sidebar": "bun run ./scripts/sync-codex-sidebar.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

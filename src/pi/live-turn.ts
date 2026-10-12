@@ -34,15 +34,17 @@ export interface ActiveTurn {
   unsubscribe?: () => void;
 }
 
-export const emptyTurn = (): Turn => {
+export const emptyTurn = (rootTurnId?: string | null): Turn => {
   const startedAt = Date.now();
+  const id = randomUUID();
   return {
     completedAt: null,
     durationMs: null,
     error: null,
-    id: randomUUID(),
+    id,
     items: [],
     itemsView: "full",
+    rootTurnId: rootTurnId ?? id,
     startedAt: Math.floor(startedAt / 1000),
     status: "inProgress",
   };
@@ -84,6 +86,7 @@ const handleMessageUpdate = (
       id: randomUUID(),
       memoryCitation: null,
       phase: null,
+      questions: null,
       text: "",
       type: "agentMessage" as const,
     };
@@ -208,6 +211,7 @@ export const finishTurn = (active: ActiveTurn): void => {
       additionalDetails: null,
       codexErrorInfo: null,
       message: active.failure.message,
+      misalignment: null,
     };
   }
   active.turn.completedAt = Math.floor(Date.now() / 1000);

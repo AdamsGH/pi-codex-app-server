@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 
+import { CODEX_APP_SERVER_COMPATIBILITY_VERSION } from "../src/codex-app-server-identity.js";
 import type { AppServerConfig } from "../src/config/app-server-config.js";
 import type { JsonRpcConnection } from "../src/protocol/json-rpc-connection.js";
 import type {
@@ -143,7 +144,7 @@ const startRelay = async () => {
   const { port } = addressSchema.parse(server.address());
   remoteMocks.loadOrEnroll.mockResolvedValue({
     accountId: "test-account",
-    appServerVersion: "0.149.0",
+    appServerVersion: CODEX_APP_SERVER_COMPATIBILITY_VERSION,
     environmentId: "test-environment",
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     remoteControlToken: "test-token",
@@ -220,7 +221,7 @@ describe("Remote Control relay lifecycle", () => {
 
     remoteMocks.loadOrEnroll.mockResolvedValue({
       accountId: "test-account",
-      appServerVersion: "0.149.0",
+      appServerVersion: CODEX_APP_SERVER_COMPATIBILITY_VERSION,
       environmentId: "test-environment",
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       remoteControlToken: "test-token",

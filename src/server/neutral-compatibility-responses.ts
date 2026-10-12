@@ -5,11 +5,22 @@ export const registerNeutralCompatibilityResponses = (
 ): void => {
   connection.registerRequest("configRequirements/read", () => ({
     requirements: null,
+    supportsIndependentSpeedModes: false,
   }));
   connection.registerRequest("plugin/installed", () => ({
     marketplaceLoadErrors: [],
     marketplaces: [],
   }));
+  connection.registerRequest("plugin/list", () => ({
+    featuredPluginIds: [],
+    marketplaceLoadErrors: [],
+    marketplaces: [],
+  }));
+  connection.registerRequest("app/list", () => ({
+    data: [],
+    nextCursor: null,
+  }));
+  connection.registerRequest("app/installed", () => ({ apps: [] }));
   connection.registerRequest("collaborationMode/list", () => ({ data: [] }));
   connection.registerRequest("permissionProfile/list", () => ({
     data: [],

@@ -44,40 +44,6 @@
       ],
       "title": "Environmentv2::BedrockSetupParams",
       "type": "object"
-    },
-    {
-      "properties": {
-        "accessKeyId": {
-          "type": "string"
-        },
-        "region": {
-          "type": "string"
-        },
-        "secretAccessKey": {
-          "type": "string"
-        },
-        "sessionToken": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "type": {
-          "enum": [
-            "accessKeys"
-          ],
-          "title": "AccessKeysv2::BedrockSetupParamsType",
-          "type": "string"
-        }
-      },
-      "required": [
-        "accessKeyId",
-        "region",
-        "secretAccessKey",
-        "type"
-      ],
-      "title": "AccessKeysv2::BedrockSetupParams",
-      "type": "object"
     }
   ],
   "title": "BedrockSetupParams"

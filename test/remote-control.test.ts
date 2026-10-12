@@ -5,7 +5,10 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { codexAppServerUserAgent } from "../src/codex-app-server-identity.js";
+import {
+  CODEX_APP_SERVER_COMPATIBILITY_VERSION,
+  codexAppServerUserAgent,
+} from "../src/codex-app-server-identity.js";
 import type { AppServerConfig } from "../src/config/app-server-config.js";
 import { loadOrEnroll } from "../src/remote/enrollment.js";
 import { resolveRemoteControlEndpoints } from "../src/remote/remote-control-endpoints.js";
@@ -107,8 +110,12 @@ describe("Remote Control boundaries", () => {
       .object({ app_server_version: z.string() })
       .passthrough()
       .parse(requestBody);
-    expect(enrollRequest.app_server_version).toBe("0.149.0");
-    expect(enrollment.appServerVersion).toBe("0.149.0");
+    expect(enrollRequest.app_server_version).toBe(
+      CODEX_APP_SERVER_COMPATIBILITY_VERSION
+    );
+    expect(enrollment.appServerVersion).toBe(
+      CODEX_APP_SERVER_COMPATIBILITY_VERSION
+    );
     expect(requestUserAgent).toBe(codexAppServerUserAgent());
   });
 });

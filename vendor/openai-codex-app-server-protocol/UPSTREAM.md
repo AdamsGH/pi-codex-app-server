@@ -1,12 +1,7 @@
 # OpenAI Codex app-server protocol snapshot
 
-The generated TypeScript declarations and JSON Schema in this directory were generated from `openai/codex` commit `c9b19deb09c1841ce7acc33ddb96276030936a29` on 2026-08-23.
+[protocol-snapshot.json](protocol-snapshot.json) records the generating CLI version, upstream release commit, and artifact digests. Text digests normalize CRLF to LF for portable checkouts. The handshake and remote enrollment use that version. `common.rs` is the matching upstream source used to generate the method map.
 
-They include stable and experimental methods and were produced with:
+Run `bun run protocol:sync` from the repository root to replace the snapshot from the installed Codex CLI. Set `CODEX_PROTOCOL_CLI` to select another executable. This invokes `codex app-server generate-ts --experimental` and `codex app-server generate-json-schema --experimental` and fetches the matching release source. The command removes files that upstream no longer generates and writes the manifest after generation succeeds.
 
-```text
-codex app-server generate-ts --experimental
-codex app-server generate-json-schema --experimental
-```
-
-The generated files retain their upstream notices and are distributed under the Apache License 2.0 used by the upstream repository. Do not edit them by hand; replace the snapshot only after consulting the current official implementation.
+The generated files retain their upstream notices and are distributed under the upstream Apache License 2.0. Do not edit them by hand. Adapt the Pi projections to the new contract and pass the checks documented in the repository README before deployment.

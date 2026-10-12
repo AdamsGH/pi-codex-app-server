@@ -167,7 +167,7 @@ Under `PI_CODEX_APP_SERVER_HOME`:
 
 ## Protocol coverage
 
-Built against the vendored Codex app-server protocol v2 schemas in [vendor/openai-codex-app-server-protocol/](vendor/openai-codex-app-server-protocol/), tracking Codex `0.149.0`. The method map in [src/protocol/generated/codex-methods.ts](src/protocol/generated/codex-methods.ts) is generated from the official request definitions, so method names, params, and responses line up at compile time.
+Built against the vendored Codex app-server protocol v2 schemas in [vendor/openai-codex-app-server-protocol/](vendor/openai-codex-app-server-protocol/), tracking the Codex version in [protocol-snapshot.json](vendor/openai-codex-app-server-protocol/protocol-snapshot.json). The method map in [src/protocol/generated/codex-methods.ts](src/protocol/generated/codex-methods.ts) is generated from the official request definitions, so method names, params, and responses line up at compile time.
 
 Implemented today:
 
@@ -248,3 +248,5 @@ The [ADRs](docs/adr/) are short and worth skimming before you change behavior. T
 - [Pi Coding Agent](https://pi.dev) and its [extension docs](https://github.com/badlogic/pi-mono)
 - [openai/codex](https://github.com/openai/codex), the behavioral reference for the app-server protocol
 - [CONTEXT.md](CONTEXT.md) for the vocabulary this codebase uses and the terms it deliberately avoids
+
+Update the protocol with `bun run protocol:sync` using the installed Codex CLI. Set `CODEX_PROTOCOL_CLI` to select a different executable. The command generates stable and experimental types and schemas, resolves the matching upstream release, and regenerates the method map. The snapshot manifest supplies the handshake and enrollment version. Tests verify its artifact digests. Run `bun run fix`, `bun run typecheck`, `bun run test`, and `bun run build` before deploying an update.

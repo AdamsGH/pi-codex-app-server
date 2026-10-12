@@ -179,6 +179,7 @@ describe("Pi conversation projection", () => {
       id: "assistant-2:0",
       memoryCitation: null,
       phase: null,
+      questions: null,
       text: "Found the entry point.",
       type: "agentMessage",
     });

@@ -12,6 +12,7 @@ export const paginateHistory = <T>(
   items: readonly T[],
   options: {
     cursor?: string | null;
+    anchor?: string;
     direction: SortDirection;
     key: (item: T) => string;
     limit?: number | null;
@@ -21,6 +22,15 @@ export const paginateHistory = <T>(
   const ordered =
     options.direction === "desc" ? items.toReversed() : [...items];
   let offset = 0;
+  if (options.anchor !== undefined) {
+    const index = ordered.findIndex(
+      (item) => options.key(item) === options.anchor
+    );
+    if (index === -1) {
+      throw new Error("History anchor not found");
+    }
+    offset = index + 1;
+  }
   if (options.cursor) {
     const cursor = cursorSchema.parse(
       JSON.parse(Buffer.from(options.cursor, "base64url").toString("utf-8"))

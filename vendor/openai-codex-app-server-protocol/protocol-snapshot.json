@@ -1,0 +1,12 @@
+{
+  "cliVersion": "0.162.1",
+  "commonSha256": "e25ebb90bf79be79def79ebf2dd704057577fa9806710fbea0ee240a909d0dc1",
+  "experimental": true,
+  "jsonSchemaSha256": "54b7d392c329454b417425da68f49deedfd66307f6a5c006343230108f2e4eb6",
+  "typescriptSha256": "2640f81e19947b0c9f5085c445204bc739fe869078f19f3ec97fdc0aab8b8ff3",
+  "upstream": {
+    "commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+    "repository": "https://github.com/openai/codex",
+    "tag": "rust-v0.162.1"
+  }
+}

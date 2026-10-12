@@ -1,7 +1,12 @@
 import { chmod } from "node:fs/promises";
 import path from "node:path";
 
+import { verifyProtocolSnapshot } from "./protocol-snapshot.js";
+
 const root = path.resolve(import.meta.dir, "..");
+await verifyProtocolSnapshot(
+  path.join(root, "vendor/openai-codex-app-server-protocol")
+);
 const sharedOptions = {
   format: "esm",
   packages: "external",

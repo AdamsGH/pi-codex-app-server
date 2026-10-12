@@ -4,6 +4,7 @@
 import type { AppsInstalledResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/AppsInstalledResponse.js";
 import type { AppsListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/AppsListResponse.js";
 import type { AppsReadResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/AppsReadResponse.js";
+import type { BedrockCheckGovCloudRequirementsResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/BedrockCheckGovCloudRequirementsResponse.js";
 import type { BedrockDiscoverResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/BedrockDiscoverResponse.js";
 import type { BedrockSetupResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/BedrockSetupResponse.js";
 import type { CancelLoginAccountResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/CancelLoginAccountResponse.js";
@@ -39,6 +40,9 @@ import type { FuzzyFileSearchResponse } from "../../../vendor/openai-codex-app-s
 import type { FuzzyFileSearchSessionStartResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/FuzzyFileSearchSessionStartResponse.js";
 import type { FuzzyFileSearchSessionStopResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/FuzzyFileSearchSessionStopResponse.js";
 import type { FuzzyFileSearchSessionUpdateResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/FuzzyFileSearchSessionUpdateResponse.js";
+import type { GatewayOAuthCancelResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/GatewayOAuthCancelResponse.js";
+import type { GatewayOAuthLoginResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/GatewayOAuthLoginResponse.js";
+import type { GatewayOAuthReadResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/GatewayOAuthReadResponse.js";
 import type { GetAccountRateLimitsResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/GetAccountRateLimitsResponse.js";
 import type { GetAccountResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/GetAccountResponse.js";
 import type { GetAccountTokenUsageResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/GetAccountTokenUsageResponse.js";
@@ -61,6 +65,7 @@ import type { McpServerOauthLoginResponse } from "../../../vendor/openai-codex-a
 import type { McpServerRefreshResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/McpServerRefreshResponse.js";
 import type { McpServerToolCallResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/McpServerToolCallResponse.js";
 import type { MemoryResetResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/MemoryResetResponse.js";
+import type { MemoryStatusResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/MemoryStatusResponse.js";
 import type { MockExperimentalMethodResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/MockExperimentalMethodResponse.js";
 import type { ModelListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ModelListResponse.js";
 import type { ModelProviderCapabilitiesReadResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ModelProviderCapabilitiesReadResponse.js";
@@ -69,6 +74,7 @@ import type { PluginInstallResponse } from "../../../vendor/openai-codex-app-ser
 import type { PluginInstalledResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/PluginInstalledResponse.js";
 import type { PluginListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/PluginListResponse.js";
 import type { PluginReadResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/PluginReadResponse.js";
+import type { PluginReconcileResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/PluginReconcileResponse.js";
 import type { PluginSearchResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/PluginSearchResponse.js";
 import type { PluginShareCheckoutResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/PluginShareCheckoutResponse.js";
 import type { PluginShareDeleteResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/PluginShareDeleteResponse.js";
@@ -96,6 +102,7 @@ import type { RemoteControlPairingStartResponse } from "../../../vendor/openai-c
 import type { RemoteControlPairingStatusResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/RemoteControlPairingStatusResponse.js";
 import type { RemoteControlStatusReadResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/RemoteControlStatusReadResponse.js";
 import type { ReviewStartResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ReviewStartResponse.js";
+import type { RolloutCompressResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/RolloutCompressResponse.js";
 import type { SendAddCreditsNudgeEmailResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/SendAddCreditsNudgeEmailResponse.js";
 import type { ServerDiagnosticsResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ServerDiagnosticsResponse.js";
 import type { SkillsConfigWriteResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/SkillsConfigWriteResponse.js";
@@ -103,6 +110,10 @@ import type { SkillsExtraRootsSetResponse } from "../../../vendor/openai-codex-a
 import type { SkillsListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/SkillsListResponse.js";
 import type { ThreadApproveGuardianDeniedActionResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadApproveGuardianDeniedActionResponse.js";
 import type { ThreadArchiveResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadArchiveResponse.js";
+import type { ThreadAttachmentAddResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadAttachmentAddResponse.js";
+import type { ThreadAttachmentListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadAttachmentListResponse.js";
+import type { ThreadAttachmentOwnerListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadAttachmentOwnerListResponse.js";
+import type { ThreadAttachmentRemoveResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadAttachmentRemoveResponse.js";
 import type { ThreadBackgroundTerminalsCleanResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadBackgroundTerminalsCleanResponse.js";
 import type { ThreadBackgroundTerminalsListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadBackgroundTerminalsListResponse.js";
 import type { ThreadBackgroundTerminalsTerminateResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadBackgroundTerminalsTerminateResponse.js";
@@ -120,6 +131,7 @@ import type { ThreadListResponse } from "../../../vendor/openai-codex-app-server
 import type { ThreadLoadedListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadLoadedListResponse.js";
 import type { ThreadMemoryModeSetResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadMemoryModeSetResponse.js";
 import type { ThreadMetadataUpdateResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadMetadataUpdateResponse.js";
+import type { ThreadPredictionRequestResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadPredictionRequestResponse.js";
 import type { ThreadQueueAddResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadQueueAddResponse.js";
 import type { ThreadQueueDeleteResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadQueueDeleteResponse.js";
 import type { ThreadQueueListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadQueueListResponse.js";
@@ -135,7 +147,6 @@ import type { ThreadRealtimeStartResponse } from "../../../vendor/openai-codex-a
 import type { ThreadRealtimeStopResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadRealtimeStopResponse.js";
 import type { ThreadResumeResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadResumeResponse.js";
 import type { ThreadRevertResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadRevertResponse.js";
-import type { ThreadRollbackResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadRollbackResponse.js";
 import type { ThreadSearchOccurrencesResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadSearchOccurrencesResponse.js";
 import type { ThreadSearchResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadSearchResponse.js";
 import type { ThreadSectionCreateResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadSectionCreateResponse.js";
@@ -147,17 +158,25 @@ import type { ThreadSetNameResponse } from "../../../vendor/openai-codex-app-ser
 import type { ThreadSettingsUpdateResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadSettingsUpdateResponse.js";
 import type { ThreadShellCommandResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadShellCommandResponse.js";
 import type { ThreadStartResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadStartResponse.js";
+import type { ThreadTimelineListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadTimelineListResponse.js";
 import type { ThreadTurnsListResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadTurnsListResponse.js";
 import type { ThreadUnarchiveResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadUnarchiveResponse.js";
 import type { ThreadUnsubscribeResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadUnsubscribeResponse.js";
 import type { TurnInterruptResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnInterruptResponse.js";
+import type { TurnSettingsUpdateResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnSettingsUpdateResponse.js";
 import type { TurnStartResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnStartResponse.js";
 import type { TurnSteerResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnSteerResponse.js";
+import type { UserVerificationCancelResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/UserVerificationCancelResponse.js";
+import type { UserVerificationDeleteResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/UserVerificationDeleteResponse.js";
+import type { UserVerificationEnrollResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/UserVerificationEnrollResponse.js";
+import type { UserVerificationStatusResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/UserVerificationStatusResponse.js";
+import type { UserVerificationVerifyResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/UserVerificationVerifyResponse.js";
 import type { WindowsSandboxReadinessResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/WindowsSandboxReadinessResponse.js";
 import type { WindowsSandboxSetupStartResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/WindowsSandboxSetupStartResponse.js";
 import AppsInstalledResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/AppsInstalledResponse.json" with { type: "json" };
 import AppsListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/AppsListResponse.json" with { type: "json" };
 import AppsReadResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/AppsReadResponse.json" with { type: "json" };
+import BedrockCheckGovCloudRequirementsResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/BedrockCheckGovCloudRequirementsResponse.json" with { type: "json" };
 import BedrockDiscoverResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/BedrockDiscoverResponse.json" with { type: "json" };
 import BedrockSetupResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/BedrockSetupResponse.json" with { type: "json" };
 import CancelLoginAccountResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/CancelLoginAccountResponse.json" with { type: "json" };
@@ -193,6 +212,9 @@ import FuzzyFileSearchResponseSchema from "../../../vendor/openai-codex-app-serv
 import FuzzyFileSearchSessionStartResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/FuzzyFileSearchSessionStartResponse.json" with { type: "json" };
 import FuzzyFileSearchSessionStopResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/FuzzyFileSearchSessionStopResponse.json" with { type: "json" };
 import FuzzyFileSearchSessionUpdateResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/FuzzyFileSearchSessionUpdateResponse.json" with { type: "json" };
+import GatewayOAuthCancelResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/GatewayOAuthCancelResponse.json" with { type: "json" };
+import GatewayOAuthLoginResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/GatewayOAuthLoginResponse.json" with { type: "json" };
+import GatewayOAuthReadResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/GatewayOAuthReadResponse.json" with { type: "json" };
 import GetAccountRateLimitsResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/GetAccountRateLimitsResponse.json" with { type: "json" };
 import GetAccountResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/GetAccountResponse.json" with { type: "json" };
 import GetAccountTokenUsageResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/GetAccountTokenUsageResponse.json" with { type: "json" };
@@ -212,6 +234,7 @@ import McpServerOauthLoginResponseSchema from "../../../vendor/openai-codex-app-
 import McpServerRefreshResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/McpServerRefreshResponse.json" with { type: "json" };
 import McpServerToolCallResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/McpServerToolCallResponse.json" with { type: "json" };
 import MemoryResetResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/MemoryResetResponse.json" with { type: "json" };
+import MemoryStatusResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/MemoryStatusResponse.json" with { type: "json" };
 import MockExperimentalMethodResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/MockExperimentalMethodResponse.json" with { type: "json" };
 import ModelListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ModelListResponse.json" with { type: "json" };
 import ModelProviderCapabilitiesReadResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ModelProviderCapabilitiesReadResponse.json" with { type: "json" };
@@ -220,6 +243,7 @@ import PluginInstallResponseSchema from "../../../vendor/openai-codex-app-server
 import PluginInstalledResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/PluginInstalledResponse.json" with { type: "json" };
 import PluginListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/PluginListResponse.json" with { type: "json" };
 import PluginReadResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/PluginReadResponse.json" with { type: "json" };
+import PluginReconcileResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/PluginReconcileResponse.json" with { type: "json" };
 import PluginSearchResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/PluginSearchResponse.json" with { type: "json" };
 import PluginShareCheckoutResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/PluginShareCheckoutResponse.json" with { type: "json" };
 import PluginShareDeleteResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/PluginShareDeleteResponse.json" with { type: "json" };
@@ -247,6 +271,7 @@ import RemoteControlPairingStartResponseSchema from "../../../vendor/openai-code
 import RemoteControlPairingStatusResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/RemoteControlPairingStatusResponse.json" with { type: "json" };
 import RemoteControlStatusReadResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/RemoteControlStatusReadResponse.json" with { type: "json" };
 import ReviewStartResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ReviewStartResponse.json" with { type: "json" };
+import RolloutCompressResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/RolloutCompressResponse.json" with { type: "json" };
 import SendAddCreditsNudgeEmailResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/SendAddCreditsNudgeEmailResponse.json" with { type: "json" };
 import ServerDiagnosticsResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ServerDiagnosticsResponse.json" with { type: "json" };
 import SkillsConfigWriteResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/SkillsConfigWriteResponse.json" with { type: "json" };
@@ -254,6 +279,10 @@ import SkillsExtraRootsSetResponseSchema from "../../../vendor/openai-codex-app-
 import SkillsListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/SkillsListResponse.json" with { type: "json" };
 import ThreadApproveGuardianDeniedActionResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadApproveGuardianDeniedActionResponse.json" with { type: "json" };
 import ThreadArchiveResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadArchiveResponse.json" with { type: "json" };
+import ThreadAttachmentAddResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadAttachmentAddResponse.json" with { type: "json" };
+import ThreadAttachmentListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadAttachmentListResponse.json" with { type: "json" };
+import ThreadAttachmentOwnerListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadAttachmentOwnerListResponse.json" with { type: "json" };
+import ThreadAttachmentRemoveResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadAttachmentRemoveResponse.json" with { type: "json" };
 import ThreadBackgroundTerminalsCleanResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadBackgroundTerminalsCleanResponse.json" with { type: "json" };
 import ThreadBackgroundTerminalsListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadBackgroundTerminalsListResponse.json" with { type: "json" };
 import ThreadBackgroundTerminalsTerminateResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadBackgroundTerminalsTerminateResponse.json" with { type: "json" };
@@ -271,6 +300,7 @@ import ThreadListResponseSchema from "../../../vendor/openai-codex-app-server-pr
 import ThreadLoadedListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadLoadedListResponse.json" with { type: "json" };
 import ThreadMemoryModeSetResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadMemoryModeSetResponse.json" with { type: "json" };
 import ThreadMetadataUpdateResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadMetadataUpdateResponse.json" with { type: "json" };
+import ThreadPredictionRequestResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadPredictionRequestResponse.json" with { type: "json" };
 import ThreadQueueAddResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadQueueAddResponse.json" with { type: "json" };
 import ThreadQueueDeleteResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadQueueDeleteResponse.json" with { type: "json" };
 import ThreadQueueListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadQueueListResponse.json" with { type: "json" };
@@ -286,7 +316,6 @@ import ThreadRealtimeStartResponseSchema from "../../../vendor/openai-codex-app-
 import ThreadRealtimeStopResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadRealtimeStopResponse.json" with { type: "json" };
 import ThreadResumeResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadResumeResponse.json" with { type: "json" };
 import ThreadRevertResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadRevertResponse.json" with { type: "json" };
-import ThreadRollbackResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadRollbackResponse.json" with { type: "json" };
 import ThreadSearchOccurrencesResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadSearchOccurrencesResponse.json" with { type: "json" };
 import ThreadSearchResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadSearchResponse.json" with { type: "json" };
 import ThreadSectionCreateResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadSectionCreateResponse.json" with { type: "json" };
@@ -298,12 +327,19 @@ import ThreadSetNameResponseSchema from "../../../vendor/openai-codex-app-server
 import ThreadSettingsUpdateResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadSettingsUpdateResponse.json" with { type: "json" };
 import ThreadShellCommandResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadShellCommandResponse.json" with { type: "json" };
 import ThreadStartResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadStartResponse.json" with { type: "json" };
+import ThreadTimelineListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadTimelineListResponse.json" with { type: "json" };
 import ThreadTurnsListResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadTurnsListResponse.json" with { type: "json" };
 import ThreadUnarchiveResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadUnarchiveResponse.json" with { type: "json" };
 import ThreadUnsubscribeResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/ThreadUnsubscribeResponse.json" with { type: "json" };
 import TurnInterruptResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/TurnInterruptResponse.json" with { type: "json" };
+import TurnSettingsUpdateResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/TurnSettingsUpdateResponse.json" with { type: "json" };
 import TurnStartResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/TurnStartResponse.json" with { type: "json" };
 import TurnSteerResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/TurnSteerResponse.json" with { type: "json" };
+import UserVerificationCancelResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/UserVerificationCancelResponse.json" with { type: "json" };
+import UserVerificationDeleteResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/UserVerificationDeleteResponse.json" with { type: "json" };
+import UserVerificationEnrollResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/UserVerificationEnrollResponse.json" with { type: "json" };
+import UserVerificationStatusResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/UserVerificationStatusResponse.json" with { type: "json" };
+import UserVerificationVerifyResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/UserVerificationVerifyResponse.json" with { type: "json" };
 import WindowsSandboxReadinessResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/WindowsSandboxReadinessResponse.json" with { type: "json" };
 import WindowsSandboxSetupStartResponseSchema from "../../../vendor/openai-codex-app-server-protocol/json-schema/v2/WindowsSandboxSetupStartResponse.json" with { type: "json" };
 import type { ClientRequest } from "../../../vendor/openai-codex-app-server-protocol/typescript/ClientRequest.js";
@@ -311,6 +347,11 @@ import type { ClientRequest } from "../../../vendor/openai-codex-app-server-prot
 export type CodexClientResponses = {
   readonly "initialize": InitializeResponse;
   readonly "server/diagnostics": ServerDiagnosticsResponse;
+  readonly "userVerification/status": UserVerificationStatusResponse;
+  readonly "userVerification/enroll": UserVerificationEnrollResponse;
+  readonly "userVerification/delete": UserVerificationDeleteResponse;
+  readonly "userVerification/verify": UserVerificationVerifyResponse;
+  readonly "userVerification/cancel": UserVerificationCancelResponse;
   readonly "thread/start": ThreadStartResponse;
   readonly "thread/resume": ThreadResumeResponse;
   readonly "thread/fork": ThreadForkResponse;
@@ -320,6 +361,7 @@ export type CodexClientResponses = {
   readonly "thread/increment_elicitation": ThreadIncrementElicitationResponse;
   readonly "thread/decrement_elicitation": ThreadDecrementElicitationResponse;
   readonly "thread/name/set": ThreadSetNameResponse;
+  readonly "thread/prediction/request": ThreadPredictionRequestResponse;
   readonly "thread/goal/set": ThreadGoalSetResponse;
   readonly "thread/goal/get": ThreadGoalGetResponse;
   readonly "thread/goal/clear": ThreadGoalClearResponse;
@@ -330,10 +372,16 @@ export type CodexClientResponses = {
   readonly "thread/queue/reorder": ThreadQueueReorderResponse;
   readonly "thread/queue/start": ThreadQueueStartResponse;
   readonly "thread/metadata/update": ThreadMetadataUpdateResponse;
+  readonly "thread/attachment/add": ThreadAttachmentAddResponse;
+  readonly "thread/attachment/list": ThreadAttachmentListResponse;
+  readonly "thread/attachmentOwner/list": ThreadAttachmentOwnerListResponse;
+  readonly "thread/attachment/remove": ThreadAttachmentRemoveResponse;
   readonly "thread/section/move": ThreadSectionMoveResponse;
   readonly "thread/settings/update": ThreadSettingsUpdateResponse;
   readonly "thread/memoryMode/set": ThreadMemoryModeSetResponse;
+  readonly "memory/status": MemoryStatusResponse;
   readonly "memory/reset": MemoryResetResponse;
+  readonly "rollout/compress": RolloutCompressResponse;
   readonly "thread/unarchive": ThreadUnarchiveResponse;
   readonly "thread/compact/start": ThreadCompactStartResponse;
   readonly "thread/shellCommand": ThreadShellCommandResponse;
@@ -341,7 +389,6 @@ export type CodexClientResponses = {
   readonly "thread/backgroundTerminals/clean": ThreadBackgroundTerminalsCleanResponse;
   readonly "thread/backgroundTerminals/list": ThreadBackgroundTerminalsListResponse;
   readonly "thread/backgroundTerminals/terminate": ThreadBackgroundTerminalsTerminateResponse;
-  readonly "thread/rollback": ThreadRollbackResponse;
   readonly "thread/revert": ThreadRevertResponse;
   readonly "thread/list": ThreadListResponse;
   readonly "project/list": ProjectListResponse;
@@ -371,6 +418,7 @@ export type CodexClientResponses = {
   readonly "plugin/list": PluginListResponse;
   readonly "plugin/search": PluginSearchResponse;
   readonly "plugin/installed": PluginInstalledResponse;
+  readonly "plugin/reconcile": PluginReconcileResponse;
   readonly "plugin/read": PluginReadResponse;
   readonly "plugin/skill/read": PluginSkillReadResponse;
   readonly "plugin/share/save": PluginShareSaveResponse;
@@ -394,6 +442,7 @@ export type CodexClientResponses = {
   readonly "plugin/install": PluginInstallResponse;
   readonly "plugin/uninstall": PluginUninstallResponse;
   readonly "turn/start": TurnStartResponse;
+  readonly "turn/settings/update": TurnSettingsUpdateResponse;
   readonly "turn/steer": TurnSteerResponse;
   readonly "turn/interrupt": TurnInterruptResponse;
   readonly "thread/realtime/start": ThreadRealtimeStartResponse;
@@ -401,9 +450,13 @@ export type CodexClientResponses = {
   readonly "thread/realtime/appendText": ThreadRealtimeAppendTextResponse;
   readonly "thread/realtime/appendSpeech": ThreadRealtimeAppendSpeechResponse;
   readonly "thread/realtime/stop": ThreadRealtimeStopResponse;
+  readonly "thread/timeline/list": ThreadTimelineListResponse;
   readonly "thread/realtime/listVoices": ThreadRealtimeListVoicesResponse;
   readonly "review/start": ReviewStartResponse;
   readonly "model/list": ModelListResponse;
+  readonly "account/gatewayOAuth/read": GatewayOAuthReadResponse;
+  readonly "account/gatewayOAuth/login": GatewayOAuthLoginResponse;
+  readonly "account/gatewayOAuth/cancel": GatewayOAuthCancelResponse;
   readonly "modelProvider/capabilities/read": ModelProviderCapabilitiesReadResponse;
   readonly "experimentalFeature/list": ExperimentalFeatureListResponse;
   readonly "permissionProfile/list": PermissionProfileListResponse;
@@ -432,6 +485,7 @@ export type CodexClientResponses = {
   readonly "account/login/start": LoginAccountResponse;
   readonly "account/bedrock/discover": BedrockDiscoverResponse;
   readonly "account/bedrock/setup": BedrockSetupResponse;
+  readonly "account/bedrock/checkGovCloudRequirements": BedrockCheckGovCloudRequirementsResponse;
   readonly "account/login/cancel": CancelLoginAccountResponse;
   readonly "account/logout": LogoutAccountResponse;
   readonly "account/rateLimits/read": GetAccountRateLimitsResponse;
@@ -480,6 +534,11 @@ export type CodexClientMethods = {
 export const CodexClientMethodNames = [
   "initialize",
   "server/diagnostics",
+  "userVerification/status",
+  "userVerification/enroll",
+  "userVerification/delete",
+  "userVerification/verify",
+  "userVerification/cancel",
   "thread/start",
   "thread/resume",
   "thread/fork",
@@ -489,6 +548,7 @@ export const CodexClientMethodNames = [
   "thread/increment_elicitation",
   "thread/decrement_elicitation",
   "thread/name/set",
+  "thread/prediction/request",
   "thread/goal/set",
   "thread/goal/get",
   "thread/goal/clear",
@@ -499,10 +559,16 @@ export const CodexClientMethodNames = [
   "thread/queue/reorder",
   "thread/queue/start",
   "thread/metadata/update",
+  "thread/attachment/add",
+  "thread/attachment/list",
+  "thread/attachmentOwner/list",
+  "thread/attachment/remove",
   "thread/section/move",
   "thread/settings/update",
   "thread/memoryMode/set",
+  "memory/status",
   "memory/reset",
+  "rollout/compress",
   "thread/unarchive",
   "thread/compact/start",
   "thread/shellCommand",
@@ -510,7 +576,6 @@ export const CodexClientMethodNames = [
   "thread/backgroundTerminals/clean",
   "thread/backgroundTerminals/list",
   "thread/backgroundTerminals/terminate",
-  "thread/rollback",
   "thread/revert",
   "thread/list",
   "project/list",
@@ -540,6 +605,7 @@ export const CodexClientMethodNames = [
   "plugin/list",
   "plugin/search",
   "plugin/installed",
+  "plugin/reconcile",
   "plugin/read",
   "plugin/skill/read",
   "plugin/share/save",
@@ -563,6 +629,7 @@ export const CodexClientMethodNames = [
   "plugin/install",
   "plugin/uninstall",
   "turn/start",
+  "turn/settings/update",
   "turn/steer",
   "turn/interrupt",
   "thread/realtime/start",
@@ -570,9 +637,13 @@ export const CodexClientMethodNames = [
   "thread/realtime/appendText",
   "thread/realtime/appendSpeech",
   "thread/realtime/stop",
+  "thread/timeline/list",
   "thread/realtime/listVoices",
   "review/start",
   "model/list",
+  "account/gatewayOAuth/read",
+  "account/gatewayOAuth/login",
+  "account/gatewayOAuth/cancel",
   "modelProvider/capabilities/read",
   "experimentalFeature/list",
   "permissionProfile/list",
@@ -601,6 +672,7 @@ export const CodexClientMethodNames = [
   "account/login/start",
   "account/bedrock/discover",
   "account/bedrock/setup",
+  "account/bedrock/checkGovCloudRequirements",
   "account/login/cancel",
   "account/logout",
   "account/rateLimits/read",
@@ -638,6 +710,11 @@ export const CodexClientMethodNames = [
 export const CodexClientResponseSchemas = {
   "initialize": InitializeResponseSchema,
   "server/diagnostics": ServerDiagnosticsResponseSchema,
+  "userVerification/status": UserVerificationStatusResponseSchema,
+  "userVerification/enroll": UserVerificationEnrollResponseSchema,
+  "userVerification/delete": UserVerificationDeleteResponseSchema,
+  "userVerification/verify": UserVerificationVerifyResponseSchema,
+  "userVerification/cancel": UserVerificationCancelResponseSchema,
   "thread/start": ThreadStartResponseSchema,
   "thread/resume": ThreadResumeResponseSchema,
   "thread/fork": ThreadForkResponseSchema,
@@ -647,6 +724,7 @@ export const CodexClientResponseSchemas = {
   "thread/increment_elicitation": ThreadIncrementElicitationResponseSchema,
   "thread/decrement_elicitation": ThreadDecrementElicitationResponseSchema,
   "thread/name/set": ThreadSetNameResponseSchema,
+  "thread/prediction/request": ThreadPredictionRequestResponseSchema,
   "thread/goal/set": ThreadGoalSetResponseSchema,
   "thread/goal/get": ThreadGoalGetResponseSchema,
   "thread/goal/clear": ThreadGoalClearResponseSchema,
@@ -657,10 +735,16 @@ export const CodexClientResponseSchemas = {
   "thread/queue/reorder": ThreadQueueReorderResponseSchema,
   "thread/queue/start": ThreadQueueStartResponseSchema,
   "thread/metadata/update": ThreadMetadataUpdateResponseSchema,
+  "thread/attachment/add": ThreadAttachmentAddResponseSchema,
+  "thread/attachment/list": ThreadAttachmentListResponseSchema,
+  "thread/attachmentOwner/list": ThreadAttachmentOwnerListResponseSchema,
+  "thread/attachment/remove": ThreadAttachmentRemoveResponseSchema,
   "thread/section/move": ThreadSectionMoveResponseSchema,
   "thread/settings/update": ThreadSettingsUpdateResponseSchema,
   "thread/memoryMode/set": ThreadMemoryModeSetResponseSchema,
+  "memory/status": MemoryStatusResponseSchema,
   "memory/reset": MemoryResetResponseSchema,
+  "rollout/compress": RolloutCompressResponseSchema,
   "thread/unarchive": ThreadUnarchiveResponseSchema,
   "thread/compact/start": ThreadCompactStartResponseSchema,
   "thread/shellCommand": ThreadShellCommandResponseSchema,
@@ -668,7 +752,6 @@ export const CodexClientResponseSchemas = {
   "thread/backgroundTerminals/clean": ThreadBackgroundTerminalsCleanResponseSchema,
   "thread/backgroundTerminals/list": ThreadBackgroundTerminalsListResponseSchema,
   "thread/backgroundTerminals/terminate": ThreadBackgroundTerminalsTerminateResponseSchema,
-  "thread/rollback": ThreadRollbackResponseSchema,
   "thread/revert": ThreadRevertResponseSchema,
   "thread/list": ThreadListResponseSchema,
   "project/list": ProjectListResponseSchema,
@@ -698,6 +781,7 @@ export const CodexClientResponseSchemas = {
   "plugin/list": PluginListResponseSchema,
   "plugin/search": PluginSearchResponseSchema,
   "plugin/installed": PluginInstalledResponseSchema,
+  "plugin/reconcile": PluginReconcileResponseSchema,
   "plugin/read": PluginReadResponseSchema,
   "plugin/skill/read": PluginSkillReadResponseSchema,
   "plugin/share/save": PluginShareSaveResponseSchema,
@@ -721,6 +805,7 @@ export const CodexClientResponseSchemas = {
   "plugin/install": PluginInstallResponseSchema,
   "plugin/uninstall": PluginUninstallResponseSchema,
   "turn/start": TurnStartResponseSchema,
+  "turn/settings/update": TurnSettingsUpdateResponseSchema,
   "turn/steer": TurnSteerResponseSchema,
   "turn/interrupt": TurnInterruptResponseSchema,
   "thread/realtime/start": ThreadRealtimeStartResponseSchema,
@@ -728,9 +813,13 @@ export const CodexClientResponseSchemas = {
   "thread/realtime/appendText": ThreadRealtimeAppendTextResponseSchema,
   "thread/realtime/appendSpeech": ThreadRealtimeAppendSpeechResponseSchema,
   "thread/realtime/stop": ThreadRealtimeStopResponseSchema,
+  "thread/timeline/list": ThreadTimelineListResponseSchema,
   "thread/realtime/listVoices": ThreadRealtimeListVoicesResponseSchema,
   "review/start": ReviewStartResponseSchema,
   "model/list": ModelListResponseSchema,
+  "account/gatewayOAuth/read": GatewayOAuthReadResponseSchema,
+  "account/gatewayOAuth/login": GatewayOAuthLoginResponseSchema,
+  "account/gatewayOAuth/cancel": GatewayOAuthCancelResponseSchema,
   "modelProvider/capabilities/read": ModelProviderCapabilitiesReadResponseSchema,
   "experimentalFeature/list": ExperimentalFeatureListResponseSchema,
   "permissionProfile/list": PermissionProfileListResponseSchema,
@@ -759,6 +848,7 @@ export const CodexClientResponseSchemas = {
   "account/login/start": LoginAccountResponseSchema,
   "account/bedrock/discover": BedrockDiscoverResponseSchema,
   "account/bedrock/setup": BedrockSetupResponseSchema,
+  "account/bedrock/checkGovCloudRequirements": BedrockCheckGovCloudRequirementsResponseSchema,
   "account/login/cancel": CancelLoginAccountResponseSchema,
   "account/logout": LogoutAccountResponseSchema,
   "account/rateLimits/read": GetAccountRateLimitsResponseSchema,
@@ -790,163 +880,6 @@ export const CodexClientResponseSchemas = {
   "fuzzyFileSearch/sessionStop": FuzzyFileSearchSessionStopResponseSchema,
 } as const;
 
-export const CodexClientNeutralResponses = {
-  "initialize": {"codexHome":"aG88rL","platformFamily":"A9CEizp","platformOs":"E","userAgent":""},
-  "server/diagnostics": {"gauges":[],"process":{"id":2}},
-  "thread/start": {"approvalPolicy":{"granular":{"mcp_elicitations":false,"rules":false,"sandbox_approval":true}},"approvalsReviewer":"guardian_subagent","cwd":"9CEi","model":"jE","modelProvider":"","sandbox":{"type":"readOnly"},"thread":{"cliVersion":"lSCV9oUj","createdAt":-354,"cwd":"pjTJ","ephemeral":true,"id":"9S","modelProvider":"sP75","preview":"hc1s2F6RkP","projectId":"kyhyuOFGeY","sessionId":"3ri","source":"vscode","status":{"type":"idle"},"turns":[],"updatedAt":-767}},
-  "thread/resume": {"approvalPolicy":{"granular":{"mcp_elicitations":false,"rules":false,"sandbox_approval":true}},"approvalsReviewer":"guardian_subagent","cwd":"9CEi","model":"eyVrl","modelProvider":"","sandbox":{"type":"externalSandbox"},"thread":{"cliVersion":"oUjuzpjTJh","createdAt":-471,"cwd":"","ephemeral":false,"id":"sP75","modelProvider":"4Z5hc1s","preview":"kP6i8ky","projectId":"OFG","sessionId":"ks3","source":{"custom":"IuhiesP"},"status":{"activeFlags":[],"type":"active"},"turns":[],"updatedAt":984}},
-  "thread/fork": {"approvalPolicy":{"granular":{"mcp_elicitations":false,"rules":false,"sandbox_approval":true}},"approvalsReviewer":"guardian_subagent","cwd":"9CEi","model":"jE","modelProvider":"","sandbox":{"type":"readOnly"},"thread":{"cliVersion":"lSCV9oUj","createdAt":-354,"cwd":"pjTJ","ephemeral":true,"id":"9S","modelProvider":"sP75","preview":"hc1s2F6RkP","projectId":"kyhyuOFGeY","sessionId":"3ri","source":"vscode","status":{"type":"idle"},"turns":[],"updatedAt":-767}},
-  "thread/archive": {},
-  "thread/delete": {},
-  "thread/unsubscribe": {"status":"notSubscribed"},
-  "thread/increment_elicitation": {"count":254,"paused":true},
-  "thread/decrement_elicitation": {"count":254,"paused":true},
-  "thread/name/set": {},
-  "thread/goal/set": {"goal":{"createdAt":254,"objective":"","status":"usageLimited","threadId":"8rLSA9CEiz","timeUsedSeconds":-505,"tokensUsed":-22,"updatedAt":-866}},
-  "thread/goal/get": {},
-  "thread/goal/clear": {"cleared":false},
-  "thread/queue/add": {"queuedSubmission":{"clientUserMessageId":"aG88rL","id":"A9CEizp","input":[]}},
-  "thread/queue/list": {"data":[]},
-  "thread/queue/update": {"queuedSubmission":{"clientUserMessageId":"aG88rL","id":"A9CEizp","input":[]}},
-  "thread/queue/delete": {"deleted":false},
-  "thread/queue/reorder": {},
-  "thread/queue/start": {"turn":{"id":"8rLSA9CEiz","items":[],"status":"completed"}},
-  "thread/metadata/update": {"thread":{"cliVersion":"8rLSA9CEiz","createdAt":-505,"cwd":"E","ephemeral":true,"id":"","modelProvider":"KXsm","preview":"SC","projectId":null,"sessionId":"zpj","source":"cli","status":{"type":"systemError"},"turns":[],"updatedAt":437}},
-  "thread/section/move": {},
-  "thread/settings/update": {},
-  "thread/memoryMode/set": {},
-  "memory/reset": {},
-  "thread/unarchive": {"thread":{"cliVersion":"8rLSA9CEiz","createdAt":-505,"cwd":"E","ephemeral":true,"id":"","modelProvider":"KXsm","preview":"SC","projectId":null,"sessionId":"zpj","source":"cli","status":{"type":"systemError"},"turns":[],"updatedAt":437}},
-  "thread/compact/start": {},
-  "thread/shellCommand": {},
-  "thread/approveGuardianDeniedAction": {},
-  "thread/backgroundTerminals/clean": {},
-  "thread/backgroundTerminals/list": {"data":[]},
-  "thread/backgroundTerminals/terminate": {"terminated":false},
-  "thread/rollback": {"thread":{"cliVersion":"8rLSA9CEiz","createdAt":-505,"cwd":"E","ephemeral":true,"id":"","modelProvider":"KXsm","preview":"SC","projectId":null,"sessionId":"zpj","source":"cli","status":{"type":"systemError"},"turns":[],"updatedAt":437}},
-  "thread/revert": {"thread":{"cliVersion":"rLSA9CEizp","createdAt":-691,"cwd":"eyVrl","ephemeral":true,"id":"OH","modelProvider":"lSCV9oUj","preview":"T","projectId":"dM","sessionId":"ysP75Q4","source":"cli","status":{"type":"idle"},"turns":[],"updatedAt":409}},
-  "thread/list": {"data":[]},
-  "project/list": {"data":[]},
-  "project/read": {"project":{"createdAt":254,"id":"","metadata":{},"name":"88rLS","position":-148,"roots":[],"updatedAt":-90}},
-  "project/create": {"project":{"createdAt":254,"id":"","metadata":{},"name":"88rLS","position":-148,"roots":[],"updatedAt":-90}},
-  "project/import": {"project":{"createdAt":254,"id":"","metadata":{},"name":"88rLS","position":-148,"roots":[],"updatedAt":-90}},
-  "project/update": {"project":{"createdAt":254,"id":"","metadata":{},"name":"88rLS","position":-148,"roots":[],"updatedAt":-90}},
-  "project/move": {},
-  "project/delete": {},
-  "threadSection/list": {"data":[]},
-  "threadSection/create": {"section":{"id":"","name":"88rLS"}},
-  "threadSection/update": {"section":{"id":"","name":"88rLS"}},
-  "threadSection/delete": {},
-  "thread/search": {"data":[]},
-  "thread/searchOccurrences": {"data":[]},
-  "thread/loaded/list": {"data":[]},
-  "thread/read": {"thread":{"cliVersion":"8rLSA9CEiz","createdAt":-505,"cwd":"E","ephemeral":true,"id":"","modelProvider":"KXsm","preview":"SC","projectId":null,"sessionId":"zpj","source":"cli","status":{"type":"systemError"},"turns":[],"updatedAt":437}},
-  "thread/turns/list": {"data":[]},
-  "thread/items/list": {"data":[]},
-  "thread/inject_items": {},
-  "skills/list": {"data":[]},
-  "skills/extraRoots/set": {},
-  "hooks/list": {"data":[]},
-  "marketplace/add": {"alreadyAdded":false,"installedRoot":"","marketplaceName":"88rLS"},
-  "marketplace/remove": {"marketplaceName":""},
-  "marketplace/upgrade": {"errors":[],"selectedMarketplaces":[],"upgradedRoots":[]},
-  "plugin/list": {"marketplaces":[]},
-  "plugin/search": {"data":[]},
-  "plugin/installed": {"marketplaces":[]},
-  "plugin/read": {"plugin":{"appTemplates":[],"apps":[],"hooks":[],"marketplaceName":"rLSA9CEizp","mcpServers":[],"skills":[],"summary":{"authPolicy":"ON_INSTALL","enabled":false,"id":"smOHVlSC","installPolicy":"INSTALLED_BY_DEFAULT","installed":true,"name":"T","source":{"package":"","type":"npm"}}}},
-  "plugin/skill/read": {},
-  "plugin/share/save": {"remotePluginId":"","shareUrl":"88rLS"},
-  "plugin/share/updateTargets": {"discoverability":"UNLISTED","principals":[]},
-  "plugin/share/list": {"data":[]},
-  "plugin/share/checkout": {"marketplaceName":"aG88rL","marketplacePath":"A9CEizp","pluginId":"E","pluginName":"","pluginPath":"Vrlc","remotePluginId":"KXsm"},
-  "plugin/share/delete": {},
-  "app/read": {"apps":[],"missingAppIds":[]},
-  "app/list": {"data":[]},
-  "app/installed": {"apps":[]},
-  "fs/readFile": {"dataBase64":"aG88rL"},
-  "fs/writeFile": {},
-  "fs/createDirectory": {},
-  "fs/getMetadata": {"createdAtMs":254,"isDirectory":true,"isFile":false,"isSymlink":false,"modifiedAtMs":937},
-  "fs/readDirectory": {"entries":[]},
-  "fs/remove": {},
-  "fs/copy": {},
-  "fs/watch": {"path":"aG88rL"},
-  "fs/unwatch": {},
-  "skills/config/write": {"effectiveEnabled":false},
-  "plugin/install": {"appsNeedingAuth":[],"authPolicy":"ON_INSTALL"},
-  "plugin/uninstall": {},
-  "turn/start": {"turn":{"id":"8rLSA9CEiz","items":[],"status":"completed"}},
-  "turn/steer": {"turnId":"aG88rL"},
-  "turn/interrupt": {},
-  "thread/realtime/start": {},
-  "thread/realtime/appendAudio": {},
-  "thread/realtime/appendText": {},
-  "thread/realtime/appendSpeech": {},
-  "thread/realtime/stop": {},
-  "thread/realtime/listVoices": {"voices":{"defaultV1":"maple","defaultV2":"alloy","v1":[],"v2":[]}},
-  "review/start": {"reviewThreadId":"aG88rL","turn":{"id":"Eizpj","items":[],"status":"inProgress"}},
-  "model/list": {"data":[]},
-  "modelProvider/capabilities/read": {"imageGeneration":false,"namespaceTools":true,"webSearch":false},
-  "experimentalFeature/list": {"data":[]},
-  "permissionProfile/list": {"data":[]},
-  "experimentalFeature/enablement/set": {"enablement":{}},
-  "remoteControl/enable": {"installationId":"","serverName":"88rLS","status":"connecting"},
-  "remoteControl/disable": {"installationId":"","serverName":"88rLS","status":"connecting"},
-  "remoteControl/status/read": {"installationId":"","serverName":"88rLS","status":"connecting"},
-  "remoteControl/pairing/start": {"environmentId":"aG88rL","expiresAt":442,"pairingCode":"CEizpjEeyV"},
-  "remoteControl/pairing/status": {"claimed":false},
-  "remoteControl/client/list": {"data":[]},
-  "remoteControl/client/revoke": {},
-  "collaborationMode/list": {"data":[]},
-  "mock/experimentalMethod": {},
-  "environment/add": {},
-  "environment/info": {"shell":{"name":"","path":"88rLS"}},
-  "environment/status": {"status":"unknown"},
-  "mcpServer/oauth/login": {"authorizationUrl":"aG88rL"},
-  "config/mcpServer/reload": {},
-  "mcpServerStatus/list": {"data":[]},
-  "mcpServer/resource/read": {"contents":[]},
-  "mcpServer/event/stream/start": {},
-  "mcpServer/event/stream/stop": {},
-  "mcpServer/tool/call": {"content":[]},
-  "windowsSandbox/setupStart": {"started":false},
-  "windowsSandbox/readiness": {"status":"notConfigured"},
-  "account/login/start": {"type":"amazonBedrock"},
-  "account/bedrock/discover": {"environmentCredentials":[],"profiles":[]},
-  "account/bedrock/setup": {},
-  "account/login/cancel": {"status":"notFound"},
-  "account/logout": {},
-  "account/rateLimits/read": {"rateLimits":{}},
-  "account/rateLimitResetCredit/consume": {"outcome":"alreadyRedeemed"},
-  "account/usage/read": {"summary":{}},
-  "account/workspaceMessages/read": {"featureEnabled":false,"messages":[]},
-  "account/sendAddCreditsNudgeEmail": {"status":"cooldown_active"},
-  "feedback/upload": {"threadId":"aG88rL"},
-  "command/exec": {"exitCode":254,"stderr":"","stdout":"88rLS"},
-  "command/exec/write": {},
-  "command/exec/terminate": {},
-  "command/exec/resize": {},
-  "process/spawn": {},
-  "process/writeStdin": {},
-  "process/kill": {},
-  "process/resizePty": {},
-  "config/read": {"config":{},"origins":{}},
-  "externalAgentConfig/detect": {"items":[]},
-  "externalAgentConfig/import": {"importId":"aG88rL"},
-  "externalAgentConfig/import/recordHistory": {"importId":"aG88rL"},
-  "externalAgentConfig/import/readHistories": {"connectors":[],"data":[]},
-  "config/value/write": {"filePath":"aG88rL","status":"ok","version":"CEizpjEeyV"},
-  "config/batchWrite": {"filePath":"aG88rL","status":"ok","version":"CEizpjEeyV"},
-  "configRequirements/read": {},
-  "account/read": {"requiresOpenaiAuth":true},
-  "getConversationSummary": {"summary":{"cliVersion":"","conversationId":"","cwd":"","gitInfo":null,"modelProvider":"pi","path":"","preview":"","source":"unknown","timestamp":null,"updatedAt":null}},
-  "gitDiffToRemote": {"diff":"","sha":""},
-  "getAuthStatus": {"authMethod":null,"authToken":null,"requiresOpenaiAuth":null},
-  "fuzzyFileSearch": {"files":[]},
-  "fuzzyFileSearch/sessionStart": {},
-  "fuzzyFileSearch/sessionUpdate": {},
-  "fuzzyFileSearch/sessionStop": {},
-} satisfies Record<keyof CodexClientResponses, unknown>;
 
 import type { ApplyPatchApprovalResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/ApplyPatchApprovalResponse.js";
 import type { AttestationGenerateResponse } from "../../../vendor/openai-codex-app-server-protocol/typescript/v2/AttestationGenerateResponse.js";
@@ -1024,17 +957,3 @@ export const CodexServerResponseSchemas = {
   "applyPatchApproval": ApplyPatchApprovalResponseSchema,
   "execCommandApproval": ExecCommandApprovalResponseSchema,
 } as const;
-
-export const CodexServerNeutralResponses = {
-  "item/commandExecution/requestApproval": {"decision":"decline"},
-  "item/fileChange/requestApproval": {"decision":"cancel"},
-  "item/tool/requestUserInput": {"answers":{}},
-  "mcpServer/elicitation/request": {"action":"accept"},
-  "item/permissions/requestApproval": {"permissions":{}},
-  "item/tool/call": {"contentItems":[],"success":true},
-  "account/chatgptAuthTokens/refresh": {"accessToken":"aG88rL","chatgptAccountId":"A9CEizp"},
-  "attestation/generate": {"token":"aG88rL"},
-  "currentTime/read": {"currentTimeAt":254},
-  "applyPatchApproval": {"decision":"approved_for_session"},
-  "execCommandApproval": {"decision":"approved_for_session"},
-} satisfies Record<keyof CodexServerResponses, unknown>;

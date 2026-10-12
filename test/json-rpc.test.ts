@@ -1,11 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { codexAppServerUserAgent } from "../src/codex-app-server-identity.js";
-import { appServerLogger } from "../src/logging/app-server-logger.js";
 import {
-  CodexClientMethodNames,
-  CodexClientNeutralResponses,
-} from "../src/protocol/generated/codex-methods.js";
+  CODEX_APP_SERVER_COMPATIBILITY_VERSION,
+  codexAppServerUserAgent,
+} from "../src/codex-app-server-identity.js";
+import { appServerLogger } from "../src/logging/app-server-logger.js";
 import { JsonRpcConnection } from "../src/protocol/json-rpc-connection.js";
 import {
   ProtocolValidationError,
@@ -166,17 +165,6 @@ describe("JSON-RPC boundary", () => {
     );
   });
 
-  test("provides an official-schema-valid response for every client method", () => {
-    expect(Object.keys(CodexClientNeutralResponses)).toHaveLength(
-      CodexClientMethodNames.length
-    );
-    for (const method of CodexClientMethodNames) {
-      expect(() =>
-        validateClientResponse(method, CodexClientNeutralResponses[method])
-      ).not.toThrow();
-    }
-  });
-
   test("rejects unimplemented methods instead of returning generated fixtures", async () => {
     const sent: string[] = [];
     const transport: MessageTransport = {
@@ -217,7 +205,9 @@ describe("JSON-RPC boundary", () => {
         platform: "win32",
         release: "10.0.26200",
       })
-    ).toBe("codex_cli_rs/0.149.0 (Windows 10.0.26200; x86_64) dumb");
+    ).toBe(
+      `codex_cli_rs/${CODEX_APP_SERVER_COMPATIBILITY_VERSION} (Windows 10.0.26200; x86_64) dumb`
+    );
   });
 
   test("enforces per-connection initialization and exact notification opt-outs", async () => {

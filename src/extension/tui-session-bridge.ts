@@ -128,7 +128,7 @@ export class TuiSessionBridge {
   get ownsSession(): boolean {
     return this.#host !== undefined;
   }
-  #begin(): ActiveTurn {
+  #begin(rootTurnId?: string | null): ActiveTurn {
     const context = this.#context;
     if (!(context && this.#host)) {
       throw new Error("Pi TUI has no session lease");
@@ -152,7 +152,7 @@ export class TuiSessionBridge {
       startedAtMs: Date.now(),
       threadId: context.sessionManager.getSessionId(),
       toolItems: new Map(),
-      turn: emptyTurn(),
+      turn: emptyTurn(rootTurnId),
     };
     this.#active = active;
     active.connection.notify("turn/started", {
@@ -252,7 +252,7 @@ export class TuiSessionBridge {
     if (this.#active || !context.isIdle()) {
       throw new Error("Pi session is already running");
     }
-    const active = this.#begin();
+    const active = this.#begin(request.params.rootTurnId);
     this.#submittedPrompt = textPrompt(request.params.input);
     try {
       const inputImages = await images(request.params.input);

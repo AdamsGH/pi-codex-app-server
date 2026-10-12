@@ -23,6 +23,7 @@ const normalizePath = (value: string): string =>
     : path.resolve(value);
 const projectResponse = (project: StoredProject): Project => ({
   ...project,
+  recencyAt: project.updatedAt,
   roots: [...project.roots],
 });
 

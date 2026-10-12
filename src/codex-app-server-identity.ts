@@ -1,6 +1,9 @@
 import { arch, platform, release } from "node:os";
 
-export const CODEX_APP_SERVER_COMPATIBILITY_VERSION = "0.149.0";
+import protocolSnapshot from "../vendor/openai-codex-app-server-protocol/protocol-snapshot.json" with { type: "json" };
+
+export const CODEX_APP_SERVER_COMPATIBILITY_VERSION =
+  protocolSnapshot.cliVersion;
 
 const CODEX_USER_AGENT_PRODUCT = "codex_cli_rs";
 const INVALID_USER_AGENT_TOKEN_CHARACTER = /[^A-Za-z0-9._/-]/gu;

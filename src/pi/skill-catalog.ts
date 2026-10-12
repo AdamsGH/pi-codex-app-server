@@ -81,6 +81,7 @@ export const listPiSkills = async (
               enabled: true,
               name: skill.name,
               path: path.resolve(skill.filePath),
+              pluginId: null,
               scope: resource?.metadata.scope === "project" ? "repo" : "user",
             };
           }),

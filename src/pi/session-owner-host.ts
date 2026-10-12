@@ -70,6 +70,7 @@ export class SessionOwnerHost {
         `${ownerPath(this.#home, this.#threadId)}.json.tmp`,
         JSON.stringify({
           pid: process.pid,
+          protocolVersion: 2,
           threadId: this.#threadId,
           token,
           url: `ws://127.0.0.1:${address.port}`,

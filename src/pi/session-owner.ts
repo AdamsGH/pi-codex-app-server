@@ -17,6 +17,7 @@ export const ownerPath = (home: string, threadId: string): string =>
   );
 export const descriptorSchema = z.object({
   pid: z.number().int().positive(),
+  protocolVersion: z.union([z.literal(1), z.literal(2)]).default(1),
   threadId: z.string(),
   token: z.string().uuid(),
   url: z.string().url(),

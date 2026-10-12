@@ -7,6 +7,7 @@ import type { ImageContent } from "@earendil-works/pi-ai";
 import {
   SessionManager,
   createAgentSession,
+  VERSION as PI_VERSION,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
@@ -155,9 +156,17 @@ export const images = async (
       part.type === "image" || part.type === "localImage"
   );
   return await Promise.all(
-    imageInputs.map((part) =>
-      part.type === "image" ? remoteImage(part.url) : localImage(part.path)
-    )
+    imageInputs.map((part) => {
+      if (part.type === "localImage") {
+        return localImage(part.path);
+      }
+      if (!("url" in part)) {
+        throw new Error(
+          "Pi cannot resolve cloud image fileId; provide an image URL or local path"
+        );
+      }
+      return remoteImage(part.url);
+    })
   );
 };
 
@@ -382,6 +391,7 @@ export class PiLiveSessionManager {
             codexErrorInfo: null,
             message:
               "Pi session owner disconnected. Reconnect to inspect the persisted result before retrying.",
+            misalignment: null,
           };
           this.#lostOwners.set(threadId, {
             historyTurnCount: snapshot.historyTurnCount,
@@ -528,7 +538,7 @@ export class PiLiveSessionManager {
     if (params.effort) {
       loaded.session.setThinkingLevel(thinkingLevelSchema.parse(params.effort));
     }
-    const turn = emptyTurn();
+    const turn = emptyTurn(params.rootTurnId);
     const active: ActiveTurn = {
       agentItems: new Map(),
       connection: this.#notifier(params.threadId),
@@ -812,6 +822,7 @@ export class PiLiveSessionManager {
           additionalDetails: null,
           codexErrorInfo: null,
           message: failure.message,
+          misalignment: null,
         };
       }
     } finally {
@@ -845,6 +856,7 @@ export class PiLiveSessionManager {
       approvalPolicy: "never",
       approvalsReviewer: "user",
       cwd: session.sessionManager.getCwd(),
+      disabledPluginIds: [],
       instructionSources: [],
       model: PiModelCatalog.key(model),
       modelProvider: model.provider,
@@ -873,21 +885,26 @@ export class PiLiveSessionManager {
       agentNickname: null,
       agentRole: null,
       canAcceptDirectInput: true,
-      cliVersion: "pi-0.84",
+      cliVersion: `pi-${PI_VERSION}`,
       createdAt: now,
       cwd: session.sessionManager.getCwd(),
+      daybreakEnabled: null,
+      environments: null,
       ephemeral: !session.sessionFile,
       extra: null,
       forkedFromId: null,
       gitInfo: null,
       historyMode: "legacy",
       id: session.sessionId,
+      model: session.model ? PiModelCatalog.key(session.model) : null,
       modelProvider: session.model?.provider ?? "pi",
       name: null,
+      originator: null,
       parentThreadId: null,
       path: session.sessionFile ?? null,
       preview: "",
       projectId: null,
+      reasoningEffort: session.thinkingLevel,
       recencyAt: now,
       section: null,
       sectionEnteredAt: null,
