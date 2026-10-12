@@ -57,6 +57,14 @@ const ordinaryEntries = [
 ] satisfies SessionEntry[];
 
 describe("Pi conversation projection", () => {
+  test("does not advertise an unfinished historical turn as a running model", () => {
+    expect(
+      projectPiConversation(ordinaryEntries, "/workspace").map(
+        (turn) => turn.status
+      )
+    ).toStrictEqual(["completed", "interrupted"]);
+  });
+
   test.each([0, 1, 2, 3])(
     "ignores a system message at index %i without changing turns or timing",
     (index) => {

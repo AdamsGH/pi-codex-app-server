@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
-import { lstat, readFile, readdir, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { appServerLogger } from "../logging/app-server-logger.js";
@@ -27,6 +27,12 @@ const absolutePath = (value: string): string => {
 
 export const registerHostOperations = (connection: JsonRpcConnection): void => {
   const processes = new Map<string, ChildProcessWithoutNullStreams>();
+  connection.registerRequest("fs/createDirectory", async (params) => {
+    await mkdir(absolutePath(params.path), {
+      recursive: params.recursive ?? true,
+    });
+    return {};
+  });
   connection.registerRequest("fs/getMetadata", async (params) => {
     const file = absolutePath(params.path);
     const link = await lstat(file);

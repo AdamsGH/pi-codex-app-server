@@ -304,5 +304,10 @@ export const projectPiConversation = (
   if (state && state.turn.items.length > 0) {
     turns.push(state.turn);
   }
-  return turns;
+  // A persisted snapshot is not evidence of a running agent. The live manager
+  // overlays its actual active turn with the current runtime ID.
+  return turns.map((turn) => ({
+    ...turn,
+    status: turn.status === "inProgress" ? "interrupted" : turn.status,
+  }));
 };
