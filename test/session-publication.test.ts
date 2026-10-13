@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { setImmediate as nextEventLoop } from "node:timers/promises";
 
 import type { SessionInfo } from "@earendil-works/pi-coding-agent";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -76,6 +77,124 @@ const fixture = async () => {
 };
 
 describe("Session publication", () => {
+  test("publishes persisted catalog entries on reconnect and republishes changed recency without duplicates", async () => {
+    const f = await fixture();
+    let session = f.session("known-thread", 1);
+    const list = vi
+      .spyOn(SessionManager, "listAll")
+      .mockResolvedValue([session]);
+    const server = await createAppServer({
+      autoStart: false,
+      hostName: "test",
+      listenUrl: new URL("ws://127.0.0.1:0"),
+      paths: {
+        database: path.join(f.home, "reconnect.sqlite"),
+        endpoint: path.join(f.home, "endpoint.json"),
+        home: f.home,
+        logs: f.home,
+      },
+      piAgentDir: f.home,
+      remoteControl: {
+        baseUrl: new URL("https://chatgpt.com/backend-api/"),
+        enabled: false,
+      },
+    });
+    server.database.upsertThread({
+      archived: false,
+      projectId: null,
+      sessionFile: session.path,
+      threadId: session.id,
+      updatedAt: session.modified.getTime(),
+    });
+    const responses: CodexWireMessage[] = [];
+    const refresh = async (): Promise<void> => {
+      const published = Promise.withResolvers<undefined>();
+      const trigger = new JsonRpcConnection({
+        clientId: "refresh",
+        logger: appServerLogger,
+        transport: {
+          close: () => {},
+          read: async function* read() {
+            yield* initializeClient();
+            await published.promise;
+            await nextEventLoop();
+          },
+          send: (message) => {
+            const notification = parseCodexWireMessage(message);
+            if (
+              "method" in notification &&
+              notification.method === "thread/started"
+            ) {
+              published.resolve();
+            }
+            return Promise.resolve();
+          },
+        },
+      });
+      server.register(trigger);
+      await trigger.run();
+    };
+    const connection = new JsonRpcConnection({
+      clientId: "reconnected-desktop",
+      logger: appServerLogger,
+      transport: {
+        close: () => {},
+        read: async function* read() {
+          yield* initializeClient();
+          await vi.waitFor(() =>
+            expect(responses).toContainEqual(
+              expect.objectContaining({ method: "thread/started" })
+            )
+          );
+          await nextEventLoop();
+          session = { ...session, modified: new Date(), name: "Updated title" };
+          list.mockResolvedValue([session]);
+          await refresh();
+          await vi.waitFor(() =>
+            expect(responses).toContainEqual(
+              expect.objectContaining({
+                method: "thread/started",
+                params: expect.objectContaining({
+                  thread: expect.objectContaining({ name: "Updated title" }),
+                }),
+              })
+            )
+          );
+          await nextEventLoop();
+          await refresh();
+          await nextEventLoop();
+        },
+        send: (message) => {
+          responses.push(parseCodexWireMessage(message));
+          return Promise.resolve();
+        },
+      },
+    });
+    try {
+      server.register(connection);
+      await connection.run();
+      const announcements = responses.filter(
+        (message) => "method" in message && message.method === "thread/started"
+      );
+      expect(announcements).toMatchObject([
+        { params: { thread: { id: "known-thread", name: null } } },
+        {
+          params: {
+            thread: {
+              id: "known-thread",
+              name: "Updated title",
+              updatedAt: Math.floor(session.modified.getTime() / 1000),
+            },
+          },
+        },
+      ]);
+    } finally {
+      server.close();
+      list.mockRestore();
+      await f.close();
+    }
+  });
+
   test("RPC reads retain an active session until unsubscribe, then remove it from the published catalog", async () => {
     const f = await fixture();
     const presence = new PiSessionPresence(f.home);

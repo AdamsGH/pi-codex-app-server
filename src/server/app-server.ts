@@ -58,10 +58,14 @@ export class AppServer {
   readonly #modelRuntime: PiModelRuntime;
   readonly #sessionRepository: PiSessionRepository;
   readonly #threadCatalog: PiThreadCatalog;
-  readonly #publicationClients = new Map<JsonRpcConnection, Set<string>>();
+  readonly #publicationClients = new Map<
+    JsonRpcConnection,
+    Map<string, string>
+  >();
   readonly #newThreads = new Map<string, ThreadStartResponse>();
   #publicationTimer?: ReturnType<typeof setInterval>;
   #refreshing = false;
+  #refreshRequested = false;
   #closed = false;
 
   constructor(options: {
@@ -602,7 +606,9 @@ export class AppServer {
     }
     this.#publicationClients.set(
       connection,
-      new Set(this.#database.listThreads().map(({ threadId }) => threadId))
+      new Map(
+        this.#database.listThreads().map(({ threadId }) => [threadId, ""])
+      )
     );
     signal.addEventListener(
       "abort",
@@ -631,49 +637,62 @@ export class AppServer {
   }
 
   async #refreshPublication(): Promise<void> {
-    if (this.#refreshing || this.#closed) {
+    if (this.#closed) {
+      return;
+    }
+    if (this.#refreshing) {
+      this.#refreshRequested = true;
       return;
     }
     this.#refreshing = true;
     try {
-      const all = await this.#sessionRepository.list();
-      let visible = all;
-      try {
-        visible = (await this.#threadCatalog.publication?.select(all)) ?? all;
-      } catch (error) {
-        appServerLogger.warn(
-          error instanceof Error
-            ? error
-            : new Error("Invalid session publication settings")
-        );
-        visible = [];
-      }
-      if (this.#closed) {
-        return;
-      }
-      const current = new Set(visible.map(({ id }) => id));
-      for (const [connection, previous] of this.#publicationClients) {
-        for (const threadId of previous) {
-          if (!current.has(threadId)) {
-            connection.notify("thread/deleted", { threadId });
-          }
+      do {
+        this.#refreshRequested = false;
+        // eslint-disable-next-line no-await-in-loop -- Coalesce refresh requests and read a fresh catalog on each pass.
+        const all = await this.#sessionRepository.list();
+        let visible = all;
+        try {
+          // eslint-disable-next-line no-await-in-loop -- Publication policy must use the catalog from this pass.
+          visible = (await this.#threadCatalog.publication?.select(all)) ?? all;
+        } catch (error) {
+          appServerLogger.warn(
+            error instanceof Error
+              ? error
+              : new Error("Invalid session publication settings")
+          );
+          visible = [];
         }
-        for (const threadId of current) {
-          if (!previous.has(threadId)) {
-            const session = visible.find(({ id }) => id === threadId);
-            if (session) {
-              const thread = this.#threadCatalog.describe(session);
-              connection.notify("thread/started", { thread });
-              if (this.#database.getThread(threadId)?.archived) {
-                connection.notify("thread/archived", { threadId });
+        if (this.#closed) {
+          return;
+        }
+        const current = new Set(visible.map(({ id }) => id));
+        const descriptions = visible.map((session) =>
+          this.#threadCatalog.describe(session)
+        );
+        const revisions = new Map(
+          descriptions.map((thread) => [thread.id, JSON.stringify(thread)])
+        );
+        for (const [connection, previous] of this.#publicationClients) {
+          for (const threadId of previous.keys()) {
+            if (!current.has(threadId)) {
+              connection.notify("thread/deleted", { threadId });
+            }
+          }
+          for (const thread of descriptions) {
+            if (previous.get(thread.id) !== revisions.get(thread.id)) {
+              connection.notify("thread/started", {
+                thread: this.#liveSessionManager.withRuntimeStatus(thread),
+              });
+              if (this.#database.getThread(thread.id)?.archived) {
+                connection.notify("thread/archived", { threadId: thread.id });
               }
             }
           }
+          this.#publicationClients.set(connection, revisions);
+          // eslint-disable-next-line no-await-in-loop -- Publish each client catalog before attaching its runtime observers.
+          await this.#liveSessionManager.observeRuntime(connection, current);
         }
-        this.#publicationClients.set(connection, current);
-        // eslint-disable-next-line no-await-in-loop -- Publish each client catalog before attaching its runtime observers.
-        await this.#liveSessionManager.observeRuntime(connection, current);
-      }
+      } while (this.#refreshRequested && !this.#closed);
     } finally {
       this.#refreshing = false;
     }
