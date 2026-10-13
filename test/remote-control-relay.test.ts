@@ -479,7 +479,7 @@ describe("Remote Control relay lifecycle", () => {
     }
   }, 10_000);
 
-  it("retires sequence and unacked state when a logical stream closes", async () => {
+  it("retires unacked state but preserves desktop sequence continuity when a logical stream reopens", async () => {
     const { messages, sockets, socket } = await startRelay();
     sendEnvelope(socket, {
       client_id: "client",
@@ -498,7 +498,7 @@ describe("Remote Control relay lifecycle", () => {
       type: "client_message",
     });
     await vi.waitFor(() => expect(messages[0]).toHaveLength(2));
-    expect(messages[0]?.[1]?.seq_id).toBe(1);
+    expect(messages[0]?.[1]?.seq_id).toBe(2);
     sendEnvelope(socket, { client_id: "client", type: "client_closed" });
     sendEnvelope(socket, {
       client_id: "barrier",

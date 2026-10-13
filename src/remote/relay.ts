@@ -485,7 +485,7 @@ export class RemoteControlRelay {
 
   #retireStream(key: string): void {
     this.#lastInboundSequence.delete(key);
-    this.#nextSequence.delete(key);
+    // A reopened stream must continue after packets already accepted by desktop.
     this.#outboundBuffer.delete(key);
   }
 

@@ -22,6 +22,7 @@ import { emptyTurn } from "../src/pi/live-turn.js";
 import { PiModelCatalog } from "../src/pi/model-catalog.js";
 import { PiModelRuntime } from "../src/pi/pi-model-runtime.js";
 import { SessionOwnerHost } from "../src/pi/session-owner-host.js";
+import { PiSessionPresence } from "../src/pi/session-presence.js";
 import { PiSessionRepository } from "../src/pi/session-repository.js";
 import { PiThreadCatalog } from "../src/pi/thread-catalog.js";
 import { JsonRpcConnection } from "../src/protocol/json-rpc-connection.js";
@@ -35,6 +36,7 @@ import { MetadataDatabase } from "../src/storage/metadata-database.js";
 import { AsyncMessageQueue } from "../src/transports/async-message-queue.js";
 import type { ServerNotification } from "../vendor/openai-codex-app-server-protocol/typescript/ServerNotification.js";
 import type { Thread } from "../vendor/openai-codex-app-server-protocol/typescript/v2/Thread.js";
+import type { ThreadResumeParams } from "../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadResumeParams.js";
 
 const mocks = vi.hoisted(() => ({
   createSession: vi.fn<typeof createAgentSession>(),
@@ -162,6 +164,53 @@ describe("Pi live turn lifecycle", () => {
     }
     vi.restoreAllMocks();
     mocks.createSession.mockReset();
+  });
+
+  it("announces native activity to desktop before the conversation has a subscriber", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "pi-background-owner-"));
+    const f = fixture(home);
+    const presence = new PiSessionPresence(home);
+    const turn = emptyTurn();
+    const host = new SessionOwnerHost({
+      handle: () => Promise.resolve(turn),
+      home,
+      snapshot: () => ({ historyTurnCount: 0, turn }),
+      threadId: "thread",
+    });
+    try {
+      await host.start();
+      await presence.start("thread");
+      await f.manager.observeRuntime(f.connection, new Set(["thread"]));
+      expect(f.notifications).toStrictEqual([
+        {
+          method: "thread/status/changed",
+          params: {
+            status: { activeFlags: [], type: "active" },
+            threadId: "thread",
+          },
+        },
+      ]);
+      turn.status = "completed";
+      host.publish({
+        method: "turn/completed",
+        params: { threadId: "thread", turn },
+      });
+      await vi.waitFor(() =>
+        expect(f.notifications.at(-1)).toMatchObject({
+          method: "thread/status/changed",
+          params: { status: { type: "idle" } },
+        })
+      );
+      expect(f.notifications).toHaveLength(2);
+      expect(f.manager.loadedList({}).data).toStrictEqual(["thread"]);
+      f.manager.detachConnection(f.connection);
+      expect(f.manager.loadedList({}).data).toStrictEqual([]);
+    } finally {
+      f.manager.close();
+      await presence.stop();
+      await host.stop();
+      await rm(home, { force: true, recursive: true });
+    }
   });
 
   it("delegates to the TUI owner without creating a second SDK runtime", async () => {
@@ -563,203 +612,215 @@ describe("Pi live turn lifecycle", () => {
     ).toBeFalsy();
   });
 
-  it("resumes a live turn with stable item IDs after events hit a closed stream", async () => {
-    const {
-      completion,
-      connection,
-      database,
-      emit,
-      manager,
-      modelCatalog,
-      modelRuntime,
-      notifications,
-      sessionManager,
-      sessionRepository,
-      threadCatalog,
-    } = fixture();
-    const historicalId = sessionManager.appendMessage({
-      content: "previous",
-      role: "user",
-      timestamp: 0,
-    });
-    const turn = await manager.startTurn(
-      { input: [], threadId: "thread" },
-      connection
-    );
-    connection.close();
-    const final = assistantEnd("stop");
-    if (final.type !== "message_end" || final.message.role !== "assistant") {
-      throw new Error("Expected assistant message fixture");
-    }
-    const partial = final.message;
-    emit({
-      assistantMessageEvent: { contentIndex: 0, partial, type: "text_start" },
-      message: partial,
-      type: "message_update",
-    });
-    emit({
-      assistantMessageEvent: {
-        contentIndex: 0,
-        delta: "before resume",
-        partial,
-        type: "text_delta",
-      },
-      message: partial,
-      type: "message_update",
-    });
-    const thread: Thread = {
-      agentNickname: null,
-      agentRole: null,
-      canAcceptDirectInput: true,
-      cliVersion: "test",
-      createdAt: 0,
-      cwd: "/synthetic",
-      daybreakEnabled: null,
-      environments: null,
-      ephemeral: true,
-      extra: null,
-      forkedFromId: null,
-      gitInfo: null,
-      historyMode: "legacy",
-      id: "thread",
-      model: null,
-      modelProvider: "pi",
-      name: null,
-      originator: null,
-      parentThreadId: null,
-      path: null,
-      preview: "previous",
-      projectId: null,
-      reasoningEffort: null,
-      recencyAt: 0,
-      section: null,
-      sectionEnteredAt: null,
-      sessionId: "thread",
-      source: { custom: "pi" },
-      status: { type: "idle" },
-      threadSource: "pi",
-      turns: [],
-      updatedAt: 0,
-    };
-    thread.turns = [
-      {
-        ...structuredClone(turn),
-        id: historicalId,
-        items: [],
-        status: "completed",
-      },
-      { ...structuredClone(turn), id: "projected-live-id", items: [] },
-    ];
-    vi.spyOn(threadCatalog, "read").mockResolvedValue(thread);
-    const config: AppServerConfig = {
-      autoStart: false,
-      hostName: "test",
-      listenUrl: new URL("ws://127.0.0.1:0"),
-      paths: {
-        database: ":memory:",
-        endpoint: "/synthetic/endpoint.json",
-        home: "/synthetic",
-        logs: "/synthetic/logs",
-      },
-      piAgentDir: "/synthetic",
-      remoteControl: {
-        baseUrl: new URL("https://example.invalid/"),
-        enabled: false,
-      },
-    };
-    const server = new AppServer({
-      config,
-      database,
-      liveSessionManager: manager,
-      modelCatalog,
-      modelRuntime,
-      sessionRepository,
-      threadCatalog,
-    });
-    const input = new AsyncMessageQueue();
-    const output: ReturnType<typeof parseCodexWireMessage>[] = [];
-    const resumed = new JsonRpcConnection({
-      clientId: "resumed",
-      logger: appServerLogger,
-      transport: {
-        close: () => input.close(),
-        read: () => input,
-        send: (message) => {
-          output.push(parseCodexWireMessage(message));
-          return Promise.resolve();
-        },
-      },
-    });
-    server.register(resumed);
-    const running = resumed.run();
-    try {
-      input.push(
-        JSON.stringify({
-          id: 1,
-          method: "initialize",
-          params: { clientInfo: { name: "test", version: "1" } },
-        })
+  it.each([false, true])(
+    "resumes a live turn with stable item IDs after events hit a closed stream, paginated=%s",
+    async (paginated) => {
+      const {
+        completion,
+        connection,
+        database,
+        emit,
+        manager,
+        modelCatalog,
+        modelRuntime,
+        notifications,
+        sessionManager,
+        sessionRepository,
+        threadCatalog,
+      } = fixture();
+      const historicalId = sessionManager.appendMessage({
+        content: "previous",
+        role: "user",
+        timestamp: 0,
+      });
+      const turn = await manager.startTurn(
+        { input: [], threadId: "thread" },
+        connection
       );
-      await vi.waitFor(() => expect(output).toHaveLength(1));
-      input.push(
-        JSON.stringify({
-          id: 2,
-          method: "thread/resume",
-          params: { threadId: "thread" },
-        })
-      );
-      await vi.waitFor(() => expect(output).toHaveLength(2));
-      const itemId = turn.items.find(
-        (item) => item.type === "agentMessage"
-      )?.id;
-      expect(itemId).toStrictEqual(expect.any(String));
-      expect(output[1]).toMatchObject({
-        id: 2,
-        result: {
-          thread: {
-            status: { type: "active" },
-            turns: [
-              { id: historicalId },
-              {
-                id: turn.id,
-                items: [
-                  { type: "userMessage" },
-                  { id: itemId, text: "before resume", type: "agentMessage" },
-                ],
-                status: "inProgress",
-              },
-            ],
-          },
-        },
+      connection.close();
+      const final = assistantEnd("stop");
+      if (final.type !== "message_end" || final.message.role !== "assistant") {
+        throw new Error("Expected assistant message fixture");
+      }
+      const partial = final.message;
+      emit({
+        assistantMessageEvent: { contentIndex: 0, partial, type: "text_start" },
+        message: partial,
+        type: "message_update",
       });
       emit({
         assistantMessageEvent: {
           contentIndex: 0,
-          delta: " after resume",
+          delta: "before resume",
           partial,
           type: "text_delta",
         },
         message: partial,
         type: "message_update",
       });
-      completion.resolve();
-      await vi.waitFor(() =>
-        expect(output.at(-1)).toMatchObject({ method: "turn/completed" })
-      );
-      expect(output[2]).toMatchObject({
-        method: "item/agentMessage/delta",
-        params: { delta: " after resume", itemId, turnId: turn.id },
+      const thread: Thread = {
+        agentNickname: null,
+        agentRole: null,
+        canAcceptDirectInput: true,
+        cliVersion: "test",
+        createdAt: 0,
+        cwd: "/synthetic",
+        daybreakEnabled: null,
+        environments: null,
+        ephemeral: true,
+        extra: null,
+        forkedFromId: null,
+        gitInfo: null,
+        historyMode: "legacy",
+        id: "thread",
+        model: null,
+        modelProvider: "pi",
+        name: null,
+        originator: null,
+        parentThreadId: null,
+        path: null,
+        preview: "previous",
+        projectId: null,
+        reasoningEffort: null,
+        recencyAt: 0,
+        section: null,
+        sectionEnteredAt: null,
+        sessionId: "thread",
+        source: { custom: "pi" },
+        status: { type: "idle" },
+        threadSource: "pi",
+        turns: [],
+        updatedAt: 0,
+      };
+      thread.turns = [
+        {
+          ...structuredClone(turn),
+          id: historicalId,
+          items: [],
+          status: "completed",
+        },
+        { ...structuredClone(turn), id: "projected-live-id", items: [] },
+      ];
+      vi.spyOn(threadCatalog, "read").mockResolvedValue(thread);
+      const config: AppServerConfig = {
+        autoStart: false,
+        hostName: "test",
+        listenUrl: new URL("ws://127.0.0.1:0"),
+        paths: {
+          database: ":memory:",
+          endpoint: "/synthetic/endpoint.json",
+          home: "/synthetic",
+          logs: "/synthetic/logs",
+        },
+        piAgentDir: "/synthetic",
+        remoteControl: {
+          baseUrl: new URL("https://example.invalid/"),
+          enabled: false,
+        },
+      };
+      const server = new AppServer({
+        config,
+        database,
+        liveSessionManager: manager,
+        modelCatalog,
+        modelRuntime,
+        sessionRepository,
+        threadCatalog,
       });
-      expect(
-        notifications.some(
-          (notification) =>
-            notification.method === "item/started" &&
-            notification.params.item.type === "agentMessage"
-        )
-      ).toBeFalsy();
-    } finally {
-      resumed.close();
-      await running;
+      const input = new AsyncMessageQueue();
+      const output: ReturnType<typeof parseCodexWireMessage>[] = [];
+      const resumed = new JsonRpcConnection({
+        clientId: "resumed",
+        logger: appServerLogger,
+        transport: {
+          close: () => input.close(),
+          read: () => input,
+          send: (message) => {
+            output.push(parseCodexWireMessage(message));
+            return Promise.resolve();
+          },
+        },
+      });
+      server.register(resumed);
+      const running = resumed.run();
+      try {
+        input.push(
+          JSON.stringify({
+            id: 1,
+            method: "initialize",
+            params: { clientInfo: { name: "test", version: "1" } },
+          })
+        );
+        await vi.waitFor(() => expect(output).toHaveLength(1));
+        const resumeParams: ThreadResumeParams = { threadId: "thread" };
+        if (paginated) {
+          resumeParams.excludeTurns = true;
+          resumeParams.initialTurnsPage = {
+            itemsView: "full",
+            limit: 1,
+            sortDirection: "desc",
+          };
+        }
+        input.push(
+          JSON.stringify({
+            id: 2,
+            method: "thread/resume",
+            params: resumeParams,
+          })
+        );
+        await vi.waitFor(() => expect(output).toHaveLength(2));
+        const itemId = turn.items.find(
+          (item) => item.type === "agentMessage"
+        )?.id;
+        expect(itemId).toStrictEqual(expect.any(String));
+        const expectedLiveTurn = {
+          id: turn.id,
+          items: [
+            { type: "userMessage" },
+            { id: itemId, text: "before resume", type: "agentMessage" },
+          ],
+          status: "inProgress",
+        };
+        const cursor = expect.any(String);
+        const expectedResponse = {
+          initialTurnsPage: paginated
+            ? { data: [expectedLiveTurn], nextCursor: cursor }
+            : null,
+          thread: {
+            status: { type: "active" },
+            turns: paginated ? [] : [{ id: historicalId }, expectedLiveTurn],
+          },
+        };
+        expect(output[1]).toMatchObject({ id: 2, result: expectedResponse });
+        emit({
+          assistantMessageEvent: {
+            contentIndex: 0,
+            delta: " after resume",
+            partial,
+            type: "text_delta",
+          },
+          message: partial,
+          type: "message_update",
+        });
+        completion.resolve();
+        await vi.waitFor(() =>
+          expect(output.at(-1)).toMatchObject({ method: "turn/completed" })
+        );
+        expect(output[2]).toMatchObject({
+          method: "item/agentMessage/delta",
+          params: { delta: " after resume", itemId, turnId: turn.id },
+        });
+        expect(
+          notifications.some(
+            (notification) =>
+              notification.method === "item/started" &&
+              notification.params.item.type === "agentMessage"
+          )
+        ).toBeFalsy();
+      } finally {
+        resumed.close();
+        await running;
+      }
     }
-  });
+  );
 });

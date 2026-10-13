@@ -188,6 +188,11 @@ export class PiLiveSessionManager {
   >();
   readonly #loading = new Map<string, Promise<LoadedSession | undefined>>();
   readonly #subscribers = new Map<string, Set<JsonRpcConnection>>();
+  readonly #runtimeObservers = new Map<
+    JsonRpcConnection,
+    ReadonlySet<string>
+  >();
+  readonly #runtimeStatuses = new Map<string, Thread["status"]>();
   readonly #loaded = new Map<string, LoadedSession>();
   readonly #modelCatalog: PiModelCatalog;
   readonly #modelRuntime: PiModelRuntime;
@@ -229,6 +234,8 @@ export class PiLiveSessionManager {
     }
     this.#owners.clear();
     this.#subscribers.clear();
+    this.#runtimeObservers.clear();
+    this.#runtimeStatuses.clear();
   }
 
   isWorking(threadId: string): boolean {
@@ -292,60 +299,76 @@ export class PiLiveSessionManager {
   }
 
   async #refreshOwners(): Promise<void> {
+    const native = this.#home
+      ? await readPiPresence(this.#home)
+      : new Set<string>();
+    const observed = [...native].filter((id) =>
+      [...this.#runtimeObservers.values()].some((visible) => visible.has(id))
+    );
     await Promise.all(
-      [...this.#subscribers.keys()].map(async (threadId) => {
-        if (
-          this.#closed ||
-          this.#owners.has(threadId) ||
-          this.#connectingOwners.has(threadId)
-        ) {
-          return;
-        }
-        try {
-          const owner = await this.attachOwner(threadId);
-          const turn = owner?.snapshot.turn;
+      [...new Set([...this.#subscribers.keys(), ...observed])].map(
+        async (threadId) => {
           if (
-            !turn ||
-            !this.#subscribers.has(threadId) ||
-            (turn.status !== "inProgress" &&
-              this.#lastDeliveredTurn.get(threadId) === turn.id)
+            this.#closed ||
+            this.#owners.has(threadId) ||
+            this.#connectingOwners.has(threadId)
           ) {
             return;
           }
-          const notifier = this.#notifier(threadId);
-          notifier.notify("turn/started", {
-            threadId,
-            turn: { ...structuredClone(turn), status: "inProgress" },
-          });
-          for (const item of turn.items) {
-            notifier.notify("item/started", {
-              item,
-              startedAtMs: Date.now(),
+          try {
+            const owner = await this.attachOwner(threadId);
+            const turn = owner?.snapshot.turn;
+            if (owner) {
+              this.#publishRuntimeStatus(
+                threadId,
+                turn?.status === "inProgress"
+                  ? { activeFlags: [], type: "active" }
+                  : { type: "idle" }
+              );
+            }
+            if (
+              !turn ||
+              !this.#subscribers.has(threadId) ||
+              (turn.status !== "inProgress" &&
+                this.#lastDeliveredTurn.get(threadId) === turn.id)
+            ) {
+              return;
+            }
+            const notifier = this.#notifier(threadId);
+            notifier.notify("turn/started", {
               threadId,
-              turnId: turn.id,
+              turn: { ...structuredClone(turn), status: "inProgress" },
             });
-            if (turn.status !== "inProgress") {
-              notifier.notify("item/completed", {
-                completedAtMs: Date.now(),
+            for (const item of turn.items) {
+              notifier.notify("item/started", {
                 item,
+                startedAtMs: Date.now(),
                 threadId,
                 turnId: turn.id,
               });
+              if (turn.status !== "inProgress") {
+                notifier.notify("item/completed", {
+                  completedAtMs: Date.now(),
+                  item,
+                  threadId,
+                  turnId: turn.id,
+                });
+              }
             }
+            if (turn.status !== "inProgress") {
+              this.#lastDeliveredTurn.set(threadId, turn.id);
+              notifier.notify("turn/completed", { threadId, turn });
+            }
+          } catch (error) {
+            appServerLogger.debug(
+              error instanceof Error
+                ? error.message
+                : "Pi owner reconnect failed",
+              { threadId }
+            );
           }
-          if (turn.status !== "inProgress") {
-            this.#lastDeliveredTurn.set(threadId, turn.id);
-            notifier.notify("turn/completed", { threadId, turn });
-          }
-        } catch (error) {
-          appServerLogger.debug(
-            error instanceof Error
-              ? error.message
-              : "Pi owner reconnect failed",
-            { threadId }
-          );
         }
-      })
+      )
     );
   }
 
@@ -563,6 +586,10 @@ export class PiLiveSessionManager {
       id: randomUUID(),
       type: "userMessage",
     };
+    active.connection.notify("thread/status/changed", {
+      status: { activeFlags: [], type: "active" },
+      threadId: params.threadId,
+    });
     active.connection.notify("turn/started", {
       threadId: params.threadId,
       turn,
@@ -593,8 +620,15 @@ export class PiLiveSessionManager {
   detach(threadId: string, connection: JsonRpcConnection): boolean {
     const subscribers = this.#subscribers.get(threadId);
     const removed = subscribers?.delete(connection) ?? false;
-    if (subscribers?.size === 0) {
+    if (!subscribers?.size) {
       this.#subscribers.delete(threadId);
+      if (
+        [...this.#runtimeObservers.values()].some((visible) =>
+          visible.has(threadId)
+        )
+      ) {
+        return removed;
+      }
       const owner = this.#owners.get(threadId);
       this.#owners.delete(threadId);
       this.#ownerGeneration.delete(threadId);
@@ -604,7 +638,11 @@ export class PiLiveSessionManager {
   }
 
   detachConnection(connection: JsonRpcConnection): void {
-    for (const threadId of this.#subscribers.keys()) {
+    this.#runtimeObservers.delete(connection);
+    for (const threadId of new Set([
+      ...this.#subscribers.keys(),
+      ...this.#owners.keys(),
+    ])) {
       this.detach(threadId, connection);
     }
   }
@@ -612,6 +650,24 @@ export class PiLiveSessionManager {
   #notifier(threadId: string): Pick<JsonRpcConnection, "notify"> {
     return {
       notify: (method, params) => {
+        if (method === "thread/status/changed") {
+          const notification = parseServerNotification(
+            parseCodexWireMessage(JSON.stringify({ method, params }))
+          );
+          if (notification.method === "thread/status/changed") {
+            this.#publishRuntimeStatus(threadId, notification.params.status);
+          }
+          return;
+        }
+        // Older Pi owners report turns but do not publish runtime status.
+        if (method === "turn/started" || method === "turn/completed") {
+          this.#publishRuntimeStatus(
+            threadId,
+            method === "turn/started"
+              ? { activeFlags: [], type: "active" }
+              : { type: "idle" }
+          );
+        }
         for (const connection of this.#subscribers.get(threadId) ?? []) {
           connection.notify(method, structuredClone(params));
         }
@@ -619,7 +675,70 @@ export class PiLiveSessionManager {
     };
   }
 
-  withActiveTurn(thread: Thread): Thread {
+  #publishRuntimeStatus(threadId: string, status: Thread["status"]): void {
+    if (
+      JSON.stringify(this.#runtimeStatuses.get(threadId)) ===
+      JSON.stringify(status)
+    ) {
+      return;
+    }
+    this.#runtimeStatuses.set(threadId, status);
+    const recipients = new Set(this.#subscribers.get(threadId));
+    for (const [connection, visible] of this.#runtimeObservers) {
+      if (visible.has(threadId)) {
+        recipients.add(connection);
+      }
+    }
+    for (const connection of recipients) {
+      connection.notify("thread/status/changed", { status, threadId });
+    }
+  }
+
+  async observeRuntime(
+    connection: JsonRpcConnection,
+    visible: ReadonlySet<string>
+  ): Promise<void> {
+    const first = !this.#runtimeObservers.has(connection);
+    const initial = first ? [...this.#runtimeStatuses] : [];
+    this.#runtimeObservers.set(connection, visible);
+    await this.#refreshOwners();
+    if (first) {
+      for (const [threadId, status] of initial) {
+        if (
+          visible.has(threadId) &&
+          JSON.stringify(this.#runtimeStatuses.get(threadId)) ===
+            JSON.stringify(status)
+        ) {
+          connection.notify("thread/status/changed", { status, threadId });
+        }
+      }
+    }
+  }
+
+  withRuntimeStatus(thread: Thread): Thread {
+    if (this.isWorking(thread.id)) {
+      return { ...thread, status: { activeFlags: [], type: "active" } };
+    }
+    return this.#owners.has(thread.id) || this.#loaded.has(thread.id)
+      ? { ...thread, status: { type: "idle" } }
+      : thread;
+  }
+
+  withActiveTurn(input: Thread): Thread {
+    const loaded = this.#loaded.get(input.id);
+    const runtimeThread = this.withRuntimeStatus(input);
+    const thread =
+      loaded && runtimeThread.ephemeral && runtimeThread.turns.length === 0
+        ? {
+            ...runtimeThread,
+            turns: [
+              ...projectPiConversation(
+                loaded.session.sessionManager.getBranch(),
+                loaded.session.sessionManager.getCwd()
+              ),
+            ],
+          }
+        : runtimeThread;
     const owner =
       this.#owners.get(thread.id)?.snapshot ?? this.#lostOwners.get(thread.id);
     if (owner?.turn) {
@@ -635,7 +754,7 @@ export class PiLiveSessionManager {
         ],
       };
     }
-    const active = this.#loaded.get(thread.id)?.active;
+    const active = loaded?.active;
     if (!active) {
       return thread;
     }

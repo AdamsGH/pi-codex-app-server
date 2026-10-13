@@ -155,6 +155,10 @@ export class TuiSessionBridge {
       turn: emptyTurn(rootTurnId),
     };
     this.#active = active;
+    active.connection.notify("thread/status/changed", {
+      status: { activeFlags: [], type: "active" },
+      threadId: active.threadId,
+    });
     active.connection.notify("turn/started", {
       threadId: active.threadId,
       turn: active.turn,

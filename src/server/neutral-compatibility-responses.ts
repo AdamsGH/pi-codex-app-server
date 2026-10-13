@@ -40,4 +40,8 @@ export const registerNeutralCompatibilityResponses = (
     data: [],
     nextCursor: null,
   }));
+  connection.registerRequest("thread/attachment/list", () => ({
+    data: [],
+    nextCursor: null,
+  }));
 };

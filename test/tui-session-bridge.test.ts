@@ -180,6 +180,37 @@ describe("TUI session bridge", () => {
     }
   });
 
+  it("publishes runtime status so desktop can discover background work and clear its busy indicator", async () => {
+    const f = await fixture();
+    const native = f.session.prompt("background work");
+    await vi.waitFor(() => expect(f.streams).toHaveLength(1));
+    const [stream] = f.streams;
+    if (!stream) {
+      throw new Error("Missing provider stream");
+    }
+    complete(stream, streamText(stream, "finished"));
+    await native;
+    await vi.waitFor(() =>
+      expect(f.clients[0]?.snapshot.turn?.status).toBe("completed")
+    );
+    const statuses = f.events[0]?.filter(
+      (event) => event.method === "thread/status/changed"
+    );
+    expect(statuses).toStrictEqual([
+      {
+        method: "thread/status/changed",
+        params: {
+          status: { activeFlags: [], type: "active" },
+          threadId: f.session.sessionId,
+        },
+      },
+      {
+        method: "thread/status/changed",
+        params: { status: { type: "idle" }, threadId: f.session.sessionId },
+      },
+    ]);
+  });
+
   it("streams native TUI input and remote input to both clients with one Pi runtime", async () => {
     const f = await fixture();
     const native = f.session.prompt("native input");

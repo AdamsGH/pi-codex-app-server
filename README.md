@@ -187,9 +187,11 @@ The desktop's post-initialize `getAuthStatus` request uses Pi's auth runtime and
 
 Daemon start and stop operations are serialized across Pi windows. A separate lock permits only one daemon per app-server home, including standalone CLI launches. Locks use a heartbeat and expire after a crashed owner stops updating them.
 
-Remote Control replays unacknowledged output before new events and sends all chunks of a message before later sequences. Partial chunk ACKs retain the remaining chunks. Explicit client closure retires the stream's replay state. Historical Pi system messages are omitted from the client view without changing the session file. Turn completion distinguishes model failures, successful runs, and cancellation, following the [app-server lifecycle](https://learn.chatgpt.com/docs/app-server).
+Remote Control replays unacknowledged output before new events and sends all chunks of a message before later sequences. Partial chunk ACKs retain the remaining chunks. Explicit client closure retires the stream's replay state but preserves its sequence counter so reopening the stream cannot reuse delivered sequence numbers. Historical Pi system messages are omitted from the client view without changing the session file. Turn completion distinguishes model failures, successful runs, and cancellation, following the [app-server lifecycle](https://learn.chatgpt.com/docs/app-server).
 
 Resuming during a running turn returns its live items and original turn/item IDs, then routes further events to the resumed connection. This also restores text generated between stream recreation and the resume request.
+
+Desktop resume requests can exclude inline turns and request a separate initial history page with full, summary, or unloaded items. Catalog clients receive `thread/status/changed` for visible native Pi sessions before opening a chat; full turn and item events require a conversation subscription. Native owner channels are observed without starting a second agent runtime. Filesystem watches are scoped to the client connection and close on disconnect.
 
 > [!WARNING] Codex-only settings such as sandbox mode and approval policy are accepted and then ignored. Sessions run with Pi's execution semantics, and the server reports Pi's effective state back. It will not invent a security guarantee it cannot enforce. If you rely on Codex sandboxing, this is not a drop-in replacement.
 

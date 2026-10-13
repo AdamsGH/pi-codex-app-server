@@ -1,7 +1,17 @@
 import { spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
-import { lstat, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { watch } from "node:fs";
+import type { FSWatcher } from "node:fs";
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  stat,
+} from "node:fs/promises";
 import path from "node:path";
 
 import { appServerLogger } from "../logging/app-server-logger.js";
@@ -27,6 +37,76 @@ const absolutePath = (value: string): string => {
 
 export const registerHostOperations = (connection: JsonRpcConnection): void => {
   const processes = new Map<string, ChildProcessWithoutNullStreams>();
+  const watches = new Map<string, FSWatcher>();
+  let watchingConnection = false;
+  connection.registerRequest("fs/watch", async (params, context) => {
+    const file = absolutePath(params.path);
+    let target = file;
+    let directory = false;
+    try {
+      const info = await stat(file);
+      directory = info.isDirectory();
+      target = await realpath(file);
+    } catch (error) {
+      if (
+        !(error instanceof Error && "code" in error && error.code === "ENOENT")
+      ) {
+        throw error;
+      }
+    }
+    const watched = directory ? target : path.dirname(target);
+    const watcher = watch(
+      watched,
+      { recursive: directory },
+      (_event, filename) => {
+        const changed = filename
+          ? path.resolve(watched, filename.toString())
+          : target;
+        if (
+          watches.get(params.watchId) !== watcher ||
+          (!directory && changed !== target)
+        ) {
+          return;
+        }
+        connection.notify("fs/changed", {
+          changedPaths: [changed],
+          watchId: params.watchId,
+        });
+      }
+    );
+    watcher.on("error", (error) => {
+      watcher.close();
+      if (watches.get(params.watchId) === watcher) {
+        watches.delete(params.watchId);
+      }
+      appServerLogger.warn(error, { watchId: params.watchId });
+    });
+    if (context.signal.aborted) {
+      watcher.close();
+      throw new Error("Filesystem watch connection is closed");
+    }
+    watches.get(params.watchId)?.close();
+    watches.set(params.watchId, watcher);
+    if (!watchingConnection) {
+      watchingConnection = true;
+      context.signal.addEventListener(
+        "abort",
+        () => {
+          for (const current of watches.values()) {
+            current.close();
+          }
+          watches.clear();
+        },
+        { once: true }
+      );
+    }
+    return { path: target };
+  });
+  connection.registerRequest("fs/unwatch", (params) => {
+    watches.get(params.watchId)?.close();
+    watches.delete(params.watchId);
+    return {};
+  });
   connection.registerRequest("fs/createDirectory", async (params) => {
     await mkdir(absolutePath(params.path), {
       recursive: params.recursive ?? true,

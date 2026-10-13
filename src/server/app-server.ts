@@ -8,6 +8,7 @@ import type { InitializeParams } from "../../vendor/openai-codex-app-server-prot
 import type { InitializeResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/InitializeResponse.js";
 import type { GetAccountResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/GetAccountResponse.js";
 import type { ModelProviderCapabilitiesReadResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ModelProviderCapabilitiesReadResponse.js";
+import type { ThreadResumeParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadResumeParams.js";
 import type { ThreadStartParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadStartParams.js";
 import type { ThreadStartResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadStartResponse.js";
 import type { TurnInterruptParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/TurnInterruptParams.js";
@@ -23,6 +24,10 @@ import type { PiModelRuntime } from "../pi/pi-model-runtime.js";
 import type { PiSessionRepository } from "../pi/session-repository.js";
 import { listPiSkills } from "../pi/skill-catalog.js";
 import type { PiThreadCatalog } from "../pi/thread-catalog.js";
+import {
+  pageThreadTurns,
+  resumeThreadHistory,
+} from "../pi/thread-history-view.js";
 import type { JsonRpcConnection } from "../protocol/json-rpc-connection.js";
 import type { MetadataDatabase } from "../storage/metadata-database.js";
 import { registerHostOperations } from "./host-operations.js";
@@ -249,7 +254,17 @@ export class AppServer {
     };
     connection.registerRequest("account/logout", logout);
 
-    const listThreads = this.#threadCatalog.list.bind(this.#threadCatalog);
+    const listThreads = async (
+      params: Parameters<PiThreadCatalog["list"]>[0]
+    ) => {
+      const result = await this.#threadCatalog.list(params);
+      return {
+        ...result,
+        data: result.data.map((thread) =>
+          this.#liveSessionManager.withRuntimeStatus(thread)
+        ),
+      };
+    };
     connection.registerRequest("thread/list", listThreads);
 
     const readThread = async (
@@ -283,24 +298,7 @@ export class AppServer {
         { includeTurns: true, threadId: params.threadId },
         context
       );
-      const page = paginateHistory(thread.turns, {
-        cursor: params.cursor,
-        direction: params.sortDirection ?? "desc",
-        key: (turn) => turn.id,
-        limit: params.limit,
-        scope: `turns:${params.threadId}`,
-      });
-      return {
-        ...page,
-        data: page.data.map((turn) => ({
-          ...turn,
-          items: params.itemsView === "notLoaded" ? [] : turn.items,
-          itemsView:
-            params.itemsView === "notLoaded"
-              ? ("notLoaded" as const)
-              : ("full" as const),
-        })),
-      };
+      return pageThreadTurns(thread, params);
     });
     connection.registerRequest("thread/items/list", async (params, context) => {
       const { thread } = await readThread(
@@ -364,7 +362,7 @@ export class AppServer {
     connection.registerRequest("thread/start", startThread);
 
     const resumeThread = async (
-      params: { readonly threadId: string },
+      params: ThreadResumeParams,
       context: { signal: AbortSignal }
     ) => {
       this.#liveSessionManager.rebindConnection(params.threadId, connection);
@@ -380,10 +378,10 @@ export class AppServer {
         return {
           ...pending,
           collaborationMode: null,
-          initialTurnsPage: null,
-          itemsBackwardsCursor: null,
-          thread: this.#liveSessionManager.withActiveTurn(pending.thread),
-          turnsBackwardsCursor: null,
+          ...resumeThreadHistory(
+            this.#liveSessionManager.withActiveTurn(pending.thread),
+            params
+          ),
         };
       }
       const sessionManager = await this.#sessionRepository.load(
@@ -406,9 +404,7 @@ export class AppServer {
         collaborationMode: null,
         cwd: sessionManager.getCwd(),
         disabledPluginIds: [],
-        initialTurnsPage: null,
         instructionSources: [],
-        itemsBackwardsCursor: null,
         model: `${encodeURIComponent(provider)}/${encodeURIComponent(modelId)}`,
         modelProvider: provider,
         multiAgentMode: "explicitRequestOnly" as const,
@@ -416,8 +412,10 @@ export class AppServer {
         runtimeWorkspaceRoots: [sessionManager.getCwd()],
         sandbox: { type: "dangerFullAccess" as const },
         serviceTier: null,
-        thread: this.#liveSessionManager.withActiveTurn(thread),
-        turnsBackwardsCursor: null,
+        ...resumeThreadHistory(
+          this.#liveSessionManager.withActiveTurn(thread),
+          params
+        ),
       };
     };
     connection.registerRequest("thread/resume", resumeThread);
@@ -610,6 +608,7 @@ export class AppServer {
       "abort",
       () => {
         this.#publicationClients.delete(connection);
+        this.#liveSessionManager.detachConnection(connection);
         if (this.#publicationClients.size === 0) {
           clearInterval(this.#publicationTimer);
           this.#publicationTimer = undefined;
@@ -672,6 +671,8 @@ export class AppServer {
           }
         }
         this.#publicationClients.set(connection, current);
+        // eslint-disable-next-line no-await-in-loop -- Publish each client catalog before attaching its runtime observers.
+        await this.#liveSessionManager.observeRuntime(connection, current);
       }
     } finally {
       this.#refreshing = false;

@@ -1,3 +1,5 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, test, vi } from "vitest";
@@ -9,6 +11,74 @@ import { registerHostOperations } from "../src/server/host-operations.js";
 import { AsyncMessageQueue } from "../src/transports/async-message-queue.js";
 
 describe("Host processes", () => {
+  test("watches a missing file through creation and releases the connection-scoped watch", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "pi-fs-watch-"));
+    const file = path.join(home, "config.toml");
+    const queue = new AsyncMessageQueue();
+    const messages: ReturnType<typeof parseCodexWireMessage>[] = [];
+    const connection = new JsonRpcConnection({
+      clientId: "watch-test",
+      logger: appServerLogger,
+      transport: {
+        close: () => queue.close(),
+        read: () => queue,
+        send: (message) => {
+          messages.push(parseCodexWireMessage(message));
+          return Promise.resolve();
+        },
+      },
+    });
+    connection.registerRequest("initialize", () => ({
+      codexHome: home,
+      platformFamily: "windows",
+      platformOs: "windows",
+      userAgent: "test",
+    }));
+    registerHostOperations(connection);
+    const run = connection.run();
+    try {
+      const requests = [
+        {
+          id: 1,
+          method: "initialize",
+          params: { clientInfo: { name: "test", version: "1" } },
+        },
+        {
+          id: 2,
+          method: "fs/watch",
+          params: { path: file, watchId: "config" },
+        },
+      ];
+      for (const request of requests) {
+        queue.push(JSON.stringify(request));
+      }
+      await vi.waitFor(() =>
+        expect(messages).toContainEqual({ id: 2, result: { path: file } })
+      );
+      await writeFile(file, "enabled = true\n");
+      await vi.waitFor(() =>
+        expect(messages).toContainEqual({
+          method: "fs/changed",
+          params: { changedPaths: [file], watchId: "config" },
+        })
+      );
+      queue.push(
+        JSON.stringify({
+          id: 3,
+          method: "fs/unwatch",
+          params: { watchId: "config" },
+        })
+      );
+      await vi.waitFor(() =>
+        expect(messages).toContainEqual({ id: 3, result: {} })
+      );
+    } finally {
+      connection.close();
+      await run;
+      await rm(home, { force: true, recursive: true });
+    }
+  });
+
   test.each([false, true])(
     "delivers process completion and capped output with streaming=%s",
     async (streaming) => {
