@@ -77,6 +77,8 @@ Existing projects are matched by host and normalized root. Windows roots ignore 
 
 Custom sections retain an explicit desktop item order. Changing the global chat sorting preference does not repair that saved order. The import refreshes it from source activity timestamps; it does not continuously reorder an open desktop app.
 
+Codex desktop 26.1007.2314 also caches server section membership separately from conversation state. Receiving `thread/started` adds a conversation but does not invalidate the custom-section thread query. A desktop section move invalidates that query and updates the saved section items. Server publication acknowledgements therefore do not prove that a new native Pi session appears in the custom Pi section. Automatic custom-section discovery remains an acceptance blocker; the server must not patch desktop files or rewrite its saved state while the app is running.
+
 The snapshot's project assignments are authoritative for its sessions. Assigned sessions appear under their repository projects. Unassigned sessions go directly into the selected section. Imported sessions are removed from Pinned. Archived sessions retain assignments but do not become direct sidebar entries. Ownership conflicts with another host, duplicate roots or section names, unknown project references, and ambiguous accounts abort before writing.
 
 The desktop saved-project format used here has one root per project. Multi-root source projects are rejected rather than partially imported. This script targets the current `sidebar-custom-sections-v3` desktop state format. It is not a legacy format converter.
