@@ -151,10 +151,12 @@ export class PiThreadCatalog {
     const sorted = orderBy(
       threads,
       [
-        (thread) =>
-          params.sortKey === "section_position"
-            ? this.sections.get(thread.id).position
-            : sortTimestamp(thread, params.sortKey),
+        (thread) => {
+          if (params.sortKey !== "section_position") {
+            return sortTimestamp(thread, params.sortKey);
+          }
+          return this.sections.get(thread.id).sortPosition;
+        },
         "id",
       ],
       [direction, direction]

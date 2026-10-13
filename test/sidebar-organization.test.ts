@@ -11,6 +11,53 @@ import { PiThreadSections } from "../src/pi/thread-sections.js";
 import { MetadataDatabase } from "../src/storage/metadata-database.js";
 
 describe("Sidebar organization", () => {
+  test("a manual move before an automatic Pi member matches desktop section order", async () => {
+    const database = new MetadataDatabase(":memory:");
+    try {
+      const repository = new PiSessionRepository(database);
+      const sessions = ["old", "new"].map((id, index) => ({
+        allMessagesText: id,
+        created: new Date(0),
+        cwd: tmpdir(),
+        firstMessage: id,
+        id,
+        messageCount: 1,
+        modified: new Date((index + 1) * 10_000),
+        path: `${id}.jsonl`,
+      }));
+      vi.spyOn(repository, "list").mockResolvedValue(sessions);
+      for (const session of sessions) {
+        database.upsertThread({
+          archived: false,
+          projectId: null,
+          sessionFile: session.path,
+          threadId: session.id,
+          updatedAt: session.modified.getTime(),
+        });
+      }
+      const catalog = new PiThreadCatalog({
+        database,
+        sessionRepository: repository,
+      });
+      const [section] = catalog.sections.list({}).data;
+      if (!section) {
+        throw new Error("Default section missing");
+      }
+      catalog.sections.move({
+        beforeThreadId: "old",
+        sectionId: section.id,
+        threadId: "new",
+      });
+      const page = await catalog.list({
+        sectionId: section.id,
+        sortKey: "section_position",
+      });
+      expect(page.data.map(({ id }) => id)).toStrictEqual(["new", "old"]);
+    } finally {
+      database.close();
+    }
+  });
+
   test("automatic Pi section ordering follows activity instead of stale positions", async () => {
     const database = new MetadataDatabase(":memory:");
     try {

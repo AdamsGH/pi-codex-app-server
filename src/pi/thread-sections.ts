@@ -26,6 +26,7 @@ const stateSchema = z.object({
     z.string(),
     z.object({
       enteredAt: z.number().nullable(),
+      manualOrder: z.boolean().optional(),
       position: z.number(),
       sectionId: z.string().nullable(),
     })
@@ -41,6 +42,7 @@ interface SectionMembership {
   section: ThreadSection | null;
   sectionEnteredAt: number | null;
   position: number;
+  sortPosition: number;
 }
 
 export class PiThreadSections {
@@ -86,13 +88,16 @@ export class PiThreadSections {
     const automatic =
       state.defaultSectionId !== null &&
       sectionId === state.defaultSectionId &&
-      (membership?.enteredAt ?? null) === null;
+      (membership?.enteredAt ?? null) === null &&
+      membership?.manualOrder !== true;
+    const position = automatic
+      ? (this.#database.getThread(threadId)?.updatedAt ?? 0)
+      : (membership?.position ?? 0);
     return {
-      position: automatic
-        ? (this.#database.getThread(threadId)?.updatedAt ?? 0)
-        : (membership?.position ?? 0),
+      position,
       section: state.sections.find(({ id }) => id === sectionId) ?? null,
       sectionEnteredAt: membership?.enteredAt ?? null,
+      sortPosition: automatic ? position : -position,
     };
   }
 
@@ -180,8 +185,7 @@ export class PiThreadSections {
       )
       .toSorted(
         (a, b) =>
-          (state.threads[a.threadId]?.position ?? 0) -
-          (state.threads[b.threadId]?.position ?? 0)
+          this.get(b.threadId).sortPosition - this.get(a.threadId).sortPosition
       )
       .map(({ threadId }) => threadId);
     if (params.beforeThreadId === params.threadId) {
@@ -207,6 +211,7 @@ export class PiThreadSections {
     }
     state.threads[params.threadId] = {
       enteredAt,
+      manualOrder: true,
       position,
       sectionId: params.sectionId,
     };
@@ -214,9 +219,11 @@ export class PiThreadSections {
       const member = state.threads[threadId];
       if (member) {
         member.position = index;
+        member.manualOrder = true;
       } else {
         state.threads[threadId] = {
           enteredAt: null,
+          manualOrder: true,
           position: index,
           sectionId: params.sectionId,
         };
