@@ -654,22 +654,29 @@ export class PiLiveSessionManager {
           const notification = parseServerNotification(
             parseCodexWireMessage(JSON.stringify({ method, params }))
           );
-          if (notification.method === "thread/status/changed") {
+          // Older owners announce idle before completion. Subscribers can
+          // release their stream on idle, so completion must reach them first.
+          if (
+            notification.method === "thread/status/changed" &&
+            (notification.params.status.type !== "idle" ||
+              this.#runtimeStatuses.get(threadId)?.type !== "active")
+          ) {
             this.#publishRuntimeStatus(threadId, notification.params.status);
           }
           return;
         }
         // Older Pi owners report turns but do not publish runtime status.
-        if (method === "turn/started" || method === "turn/completed") {
-          this.#publishRuntimeStatus(
-            threadId,
-            method === "turn/started"
-              ? { activeFlags: [], type: "active" }
-              : { type: "idle" }
-          );
+        if (method === "turn/started") {
+          this.#publishRuntimeStatus(threadId, {
+            activeFlags: [],
+            type: "active",
+          });
         }
         for (const connection of this.#subscribers.get(threadId) ?? []) {
           connection.notify(method, structuredClone(params));
+        }
+        if (method === "turn/completed") {
+          this.#publishRuntimeStatus(threadId, { type: "idle" });
         }
       },
     };

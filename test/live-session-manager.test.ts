@@ -226,6 +226,77 @@ describe("Pi live turn lifecycle", () => {
     }
   });
 
+  it.each([false, true])(
+    "delivers completion before an idle subscriber detaches, legacy owner=%s",
+    async (legacy) => {
+      const home = await mkdtemp(path.join(tmpdir(), "pi-idle-detach-"));
+      const f = fixture(home);
+      const turn = emptyTurn();
+      const host = new SessionOwnerHost({
+        handle: () => Promise.resolve(turn),
+        home,
+        snapshot: () => ({ historyTurnCount: 0, turn }),
+        threadId: "thread",
+      });
+      const received: ServerNotification[] = [];
+      const connection = new JsonRpcConnection({
+        clientId: "idle-detach",
+        logger: appServerLogger,
+        transport: new RemoteClientTransport((message) => {
+          const notification = parseServerNotification(
+            parseCodexWireMessage(message)
+          );
+          received.push(notification);
+          if (
+            notification.method === "thread/status/changed" &&
+            notification.params.status.type === "idle"
+          ) {
+            f.manager.detachConnection(connection);
+          }
+          return Promise.resolve();
+        }),
+      });
+      try {
+        await host.start();
+        f.manager.rebindConnection("thread", connection);
+        await f.manager.attachOwner("thread");
+        host.publish({
+          method: "turn/started",
+          params: { threadId: "thread", turn },
+        });
+        await vi.waitFor(() =>
+          expect(received.at(-1)?.method).toBe("turn/started")
+        );
+        turn.status = "completed";
+        if (legacy) {
+          host.publish({
+            method: "thread/status/changed",
+            params: { status: { type: "idle" }, threadId: "thread" },
+          });
+        }
+        host.publish({
+          method: "turn/completed",
+          params: { threadId: "thread", turn },
+        });
+        await vi.waitFor(() =>
+          expect(received.at(-1)).toMatchObject({
+            method: "thread/status/changed",
+            params: { status: { type: "idle" } },
+          })
+        );
+        expect(received.at(-2)).toMatchObject({
+          method: "turn/completed",
+          params: { turn: { id: turn.id, status: "completed" } },
+        });
+      } finally {
+        connection.close();
+        f.manager.close();
+        await host.stop();
+        await rm(home, { force: true, recursive: true });
+      }
+    }
+  );
+
   it("delegates to the TUI owner without creating a second SDK runtime", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "pi-owner-manager-"));
     const f = fixture(home);
@@ -288,7 +359,7 @@ describe("Pi live turn lifecycle", () => {
       await f.manager.attachOwner("thread");
       await host.stop();
       await vi.waitFor(() =>
-        expect(f.notifications.at(-1)?.method).toBe("turn/completed")
+        expect(f.notifications.at(-2)?.method).toBe("turn/completed")
       );
       turn.status = "completed";
       host = new SessionOwnerHost({
@@ -300,7 +371,7 @@ describe("Pi live turn lifecycle", () => {
       await host.start();
       await vi.waitFor(
         () =>
-          expect(f.notifications.at(-1)).toMatchObject({
+          expect(f.notifications.at(-2)).toMatchObject({
             method: "turn/completed",
             params: { turn: { id: turn.id, status: "completed" } },
           }),
@@ -516,7 +587,7 @@ describe("Pi live turn lifecycle", () => {
     );
     completion.reject(new Error("No credentials"));
     await vi.waitFor(() =>
-      expect(notifications.at(-1)).toMatchObject({
+      expect(notifications.at(-2)).toMatchObject({
         method: "turn/completed",
         params: {
           turn: { error: { message: "No credentials" }, status: "failed" },
@@ -540,12 +611,12 @@ describe("Pi live turn lifecycle", () => {
         stop: "completed",
       }[stopReason];
       await vi.waitFor(() =>
-        expect(notifications.at(-1)).toMatchObject({
+        expect(notifications.at(-2)).toMatchObject({
           method: "turn/completed",
           params: { turn: { status } },
         })
       );
-      expect(notifications.at(-1)).toMatchObject({
+      expect(notifications.at(-2)).toMatchObject({
         params: {
           turn: {
             error:
@@ -564,7 +635,7 @@ describe("Pi live turn lifecycle", () => {
     );
     await manager.interrupt("thread", turn.id);
     await vi.waitFor(() =>
-      expect(notifications.at(-1)).toMatchObject({
+      expect(notifications.at(-2)).toMatchObject({
         params: { turn: { error: null, status: "interrupted" } },
       })
     );
@@ -578,7 +649,7 @@ describe("Pi live turn lifecycle", () => {
     emit(assistantEnd("stop"));
     completion.resolve();
     await vi.waitFor(() =>
-      expect(notifications.at(-1)).toMatchObject({
+      expect(notifications.at(-2)).toMatchObject({
         method: "turn/completed",
         params: { turn: { error: null, status: "completed" } },
       })
@@ -593,7 +664,7 @@ describe("Pi live turn lifecycle", () => {
     manager.rebindConnection("thread", resumed);
     completion.resolve();
     await vi.waitFor(() =>
-      expect(resumedNotifications.at(-1)).toMatchObject({
+      expect(resumedNotifications.at(-2)).toMatchObject({
         method: "turn/completed",
       })
     );
@@ -616,7 +687,7 @@ describe("Pi live turn lifecycle", () => {
     f.connection.close();
     f.completion.resolve();
     await vi.waitFor(() =>
-      expect(otherNotifications.at(-1)?.method).toBe("turn/completed")
+      expect(otherNotifications.at(-2)?.method).toBe("turn/completed")
     );
     expect(
       f.notifications.some(
@@ -817,7 +888,7 @@ describe("Pi live turn lifecycle", () => {
         });
         completion.resolve();
         await vi.waitFor(() =>
-          expect(output.at(-1)).toMatchObject({ method: "turn/completed" })
+          expect(output.at(-2)).toMatchObject({ method: "turn/completed" })
         );
         expect(output[2]).toMatchObject({
           method: "item/agentMessage/delta",

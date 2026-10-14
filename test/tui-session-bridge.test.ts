@@ -235,7 +235,11 @@ describe("TUI session bridge", () => {
     await native;
     await vi.waitFor(() => {
       for (const events of f.events) {
-        expect(events.at(-1)?.method).toBe("turn/completed");
+        expect(events.at(-2)?.method).toBe("turn/completed");
+        expect(events.at(-1)).toMatchObject({
+          method: "thread/status/changed",
+          params: { status: { type: "idle" } },
+        });
       }
     });
     const result = await f.clients[0]?.request({

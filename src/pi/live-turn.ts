@@ -216,12 +216,12 @@ export const finishTurn = (active: ActiveTurn): void => {
   }
   active.turn.completedAt = Math.floor(Date.now() / 1000);
   active.turn.durationMs = Date.now() - active.startedAtMs;
-  active.connection.notify("thread/status/changed", {
-    status: { type: "idle" },
-    threadId: active.threadId,
-  });
   active.connection.notify("turn/completed", {
     threadId: active.threadId,
     turn: active.turn,
+  });
+  active.connection.notify("thread/status/changed", {
+    status: { type: "idle" },
+    threadId: active.threadId,
   });
 };
