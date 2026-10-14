@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { resolveDesktopEndpoint } from "./desktop/desktop-endpoint.js";
 import { DesktopNativeTools } from "./desktop/native-tools.js";
+import { reconcileDesktopProjectPrefix } from "./desktop/project-order.js";
 import {
   desktopInventorySchema,
   reconcileDesktopSectionOrder,
@@ -115,6 +116,7 @@ try {
           "list_threads",
           "move_thread_to_sidebar_section",
           "reorder_section",
+          "move_project_to_sidebar_section",
         ]) {
           if (
             !tools.some(
@@ -152,6 +154,22 @@ try {
         sources: settings.sources,
       });
       // oxlint-disable-next-line no-await-in-loop
+      const projectsReordered = await reconcileDesktopProjectPrefix({
+        moveProject: async (projectId) => {
+          await desktop.call(
+            "move_project_to_sidebar_section",
+            { projectId, sectionId: options.sectionId },
+            caller
+          );
+        },
+        planFile: path.join(serverHome, "desktop-sync-project-order.json"),
+        readInventory: async () =>
+          desktopInventorySchema.parse(
+            await desktop.call("list_threads", { limit: 50 }, caller)
+          ),
+        sectionId: options.sectionId,
+      });
+      // oxlint-disable-next-line no-await-in-loop
       const reordered = await reconcileDesktopSectionOrder({
         readInventory: async () =>
           desktopInventorySchema.parse(
@@ -168,6 +186,7 @@ try {
       });
       if (
         moved.length ||
+        projectsReordered ||
         reordered ||
         options.once ||
         lastError ||
