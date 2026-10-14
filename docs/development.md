@@ -2,7 +2,7 @@
 
 ## Reproducible setup
 
-Use Node 24 or 26 and Bun 1.4.3. The minimum runtime is Node 22.19, matching Pi's requirement. The Pi SDK packages and their internal dependencies are pinned to 1.1.0 in development. Overrides prevent a newer transitive package from breaking an older SDK's imports or introducing incompatible stream classes. Peer declarations permit the same 1.1.x family, not every Pi release.
+Use Node 24 or 26 and Bun 1.4.3. The minimum runtime is Node 22.19, matching Pi's requirement. The Pi SDK packages and their internal dependencies are pinned to 1.2.0 in development. Overrides prevent a newer transitive package from breaking an older SDK's imports or introducing incompatible stream classes. Peer declarations permit the same 1.2.x family, not every Pi release.
 
 ```sh
 bun install --frozen-lockfile
@@ -26,7 +26,7 @@ Use `bun.lock` as the sole project dependency lock. Do not commit a second npm l
 | `bun run typecheck` | TypeScript contracts |
 | `bun run test` | Isolated regression tests |
 | `bun run build` | Snapshot consistency and compiled artifacts |
-| `bun run package:check` | Tarball contents, clean npm install, CLI and SQLite migration smoke checks |
+| `bun run package:check` | Tarball contents, clean npm install, CLI, SQLite migrations, and extension loading with session-owner startup and cleanup |
 | `bun run verify` | All release checks in order |
 
 PR CI runs on Windows and Linux with Node 24 and 26. It does not claim visual desktop or live Remote Control acceptance. Package verification uses temporary storage and no model calls. Tests must not use the user's real auth or session directories.

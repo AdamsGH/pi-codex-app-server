@@ -2,7 +2,7 @@
 
 ## Install
 
-Use Pi 1.1.0 and Node.js 22.19 or newer. Node 24 or 26 is recommended for SQLite. Install the fork with `pi install npm:@pi-switch/pi-codex-app-server` after its first npm release. The unscoped npm name installs upstream.
+Use Pi 1.2.0 and Node.js 22.19 or newer. Node 24 or 26 is recommended for SQLite. Install the fork with `pi install npm:@pi-switch/pi-codex-app-server` after its first npm release. The unscoped npm name installs upstream.
 
 For a source checkout, install dependencies with Bun 1.4.3, run `bun run build`, then use `pi install /absolute/path/to/checkout`. The extension loads from TypeScript and its daemon uses that Pi installation's runtime modules. The tarball includes source, compiled entrypoints, migrations, protocol contracts, and documentation.
 

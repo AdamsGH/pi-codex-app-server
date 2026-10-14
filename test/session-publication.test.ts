@@ -4,7 +4,6 @@ import path from "node:path";
 import { setImmediate as nextEventLoop } from "node:timers/promises";
 
 import type { SessionInfo } from "@earendil-works/pi-coding-agent";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { describe, expect, test, vi } from "vitest";
 
 import { appServerLogger } from "../src/logging/app-server-logger.js";
@@ -14,6 +13,7 @@ import {
   readPiPresence,
 } from "../src/pi/session-presence.js";
 import { PiSessionPublication } from "../src/pi/session-publication.js";
+import { PiSessionRepository } from "../src/pi/session-repository.js";
 import { JsonRpcConnection } from "../src/protocol/json-rpc-connection.js";
 import { parseCodexWireMessage } from "../src/protocol/validation.js";
 import type { CodexWireMessage } from "../src/protocol/validation.js";
@@ -81,7 +81,7 @@ describe("Session publication", () => {
     const f = await fixture();
     let session = f.session("known-thread", 1);
     const list = vi
-      .spyOn(SessionManager, "listAll")
+      .spyOn(PiSessionRepository.prototype, "list")
       .mockResolvedValue([session]);
     const server = await createAppServer({
       autoStart: false,
@@ -200,7 +200,7 @@ describe("Session publication", () => {
     const presence = new PiSessionPresence(f.home);
     const responses: CodexWireMessage[] = [];
     const list = vi
-      .spyOn(SessionManager, "listAll")
+      .spyOn(PiSessionRepository.prototype, "list")
       .mockResolvedValue([f.session("rpc-thread", 1000)]);
     await writeFile(
       f.session("rpc-thread").path,
@@ -229,6 +229,13 @@ describe("Session publication", () => {
       },
     });
     try {
+      server.database.upsertThread({
+        archived: false,
+        projectId: null,
+        sessionFile: f.session("rpc-thread").path,
+        threadId: "rpc-thread",
+        updatedAt: 0,
+      });
       await f.settings({ unassigned: { mode: "active" } });
       await presence.start("rpc-thread");
       const trigger = new JsonRpcConnection({

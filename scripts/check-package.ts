@@ -40,6 +40,7 @@ const run = async (command: string[], cwd: string): Promise<string> => {
     env: {
       ...process.env,
       HUSKY: "0",
+      PI_CODEX_APP_SERVER_AUTOSTART: "0",
       PI_CODEX_APP_SERVER_HOME: path.join(workspace, "server"),
       PI_CODEX_REMOTE_CONTROL: "0",
       PI_CODING_AGENT_DIR: path.join(workspace, "pi-agent"),
@@ -156,10 +157,48 @@ try {
   const smoke = path.join(workspace, "smoke.mjs");
   await writeFile(
     smoke,
-    `const { MetadataDatabase } = await import(${JSON.stringify(manifest.name)});
+    `import { readdir } from "node:fs/promises";
+import path from "node:path";
+import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+const { MetadataDatabase } = await import(${JSON.stringify(manifest.name)});
 const database = new MetadataDatabase(":memory:");
 if (database.listProjects().length !== 0) throw new Error("Unexpected fresh database state");
 database.close();
+const settings = SettingsManager.inMemory({});
+const loader = new DefaultResourceLoader({
+  cwd: process.cwd(),
+  agentDir: process.env.PI_CODING_AGENT_DIR,
+  additionalExtensionPaths: [path.join(process.cwd(), "node_modules", ${JSON.stringify(manifest.name)}, "src/extension/index.ts")],
+  noExtensions: true,
+  noSkills: true,
+  noPromptTemplates: true,
+  noThemes: true,
+  noContextFiles: true,
+  settingsManager: settings,
+});
+await loader.reload();
+if (loader.getExtensions().errors.length !== 0) throw new Error("Installed extension failed to load");
+const modelRuntime = await ModelRuntime.create({ authPath: path.join(process.env.PI_CODING_AGENT_DIR, "auth.json"), modelsPath: null });
+const { session } = await createAgentSession({
+  cwd: process.cwd(),
+  agentDir: process.env.PI_CODING_AGENT_DIR,
+  modelRuntime,
+  resourceLoader: loader,
+  sessionManager: SessionManager.inMemory(process.cwd()),
+  settingsManager: settings,
+  tools: [],
+});
+try {
+  await session.bindExtensions({ mode: "tui" });
+  if (!session.extensionRunner.getRegisteredCommands().some(command => command.name === "codex-server")) throw new Error("Installed extension did not register its command");
+  const owners = await readdir(path.join(process.env.PI_CODEX_APP_SERVER_HOME, "owners"));
+  if (owners.filter(file => file.endsWith(".json")).length !== 1) throw new Error("Installed extension did not establish one session owner");
+} finally {
+  await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+  session.dispose();
+}
+const owners = await readdir(path.join(process.env.PI_CODEX_APP_SERVER_HOME, "owners"));
+if (owners.some(file => file.endsWith(".json") || file.endsWith(".lock"))) throw new Error("Installed extension did not release its owner and lease");
 `
   );
   await run(["node", smoke], workspace);
@@ -177,7 +216,7 @@ database.close();
     })
   );
   process.stdout.write(
-    `${JSON.stringify({ cleanInstall: "passed", cli: "passed", files: names.size, migrations: "passed", package: manifest.name, version: manifest.version })}\n`
+    `${JSON.stringify({ cleanInstall: "passed", cli: "passed", extension: "passed", files: names.size, migrations: "passed", package: manifest.name, version: manifest.version })}\n`
   );
 } finally {
   const relative = path.relative(cache, workspace);

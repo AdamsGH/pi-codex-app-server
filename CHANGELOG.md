@@ -10,6 +10,8 @@
 - Remove the bundled skill collection and replace generic guidance with project contracts.
 - Add user, architecture, development, packaging, and acceptance documentation.
 - Verify pull requests and package installation before release.
+- Target Pi 1.2.0 with matching SDK dependencies and a 1.2.x peer contract.
+- Reuse unchanged session summaries, coalesce catalog scans, and batch metadata writes during client startup.
 
 The releases below are retained upstream history from Lqm1/pi-codex-app-server.
 

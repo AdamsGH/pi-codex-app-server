@@ -24,8 +24,8 @@ describe("package manifest", () => {
       "@earendil-works/pi-tui",
     ]) {
       expect(manifest.dependencies).not.toHaveProperty(name);
-      expect(manifest.peerDependencies[name]).toBe("~1.1.0");
-      expect(manifest.devDependencies[name]).toBe("1.1.0");
+      expect(manifest.peerDependencies[name]).toBe("~1.2.0");
+      expect(manifest.devDependencies[name]).toBe("1.2.0");
     }
     expect(manifest.pi.extensions).toStrictEqual(["./src/extension/index.ts"]);
   });

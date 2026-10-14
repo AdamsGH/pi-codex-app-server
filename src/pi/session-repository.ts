@@ -1,17 +1,28 @@
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import {
   SessionManager,
+  getAgentDir,
   parseSessionEntries,
 } from "@earendil-works/pi-coding-agent";
 import type {
+  FileEntry,
   SessionEntry,
   SessionInfo,
 } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 
 import type { MetadataDatabase } from "../storage/metadata-database.js";
+import type { ThreadMetadata } from "../storage/metadata-records.js";
 import { PiProjectCatalog } from "./project-catalog.js";
 
 const messageTextSchema = z.union([
@@ -26,12 +37,12 @@ const messageTextSchema = z.union([
     ),
 ]);
 
-const summarizeMessages = (manager: SessionManager) => {
+const summarizeMessages = (entries: readonly FileEntry[]) => {
   let activity = 0;
   let messageCount = 0;
   let firstMessage = "";
   const messages: string[] = [];
-  for (const entry of manager.getEntries()) {
+  for (const entry of entries) {
     if (entry.type !== "message") {
       continue;
     }
@@ -66,32 +77,177 @@ const summarizeMessages = (manager: SessionManager) => {
 export class PiSessionRepository {
   readonly projects: PiProjectCatalog;
   readonly #database: MetadataDatabase;
+  readonly #sessionDir: string;
+  readonly #summaries = new Map<
+    string,
+    { fingerprint: string; info: SessionInfo }
+  >();
+  #listing?: Promise<readonly SessionInfo[]>;
 
-  constructor(database: MetadataDatabase) {
+  constructor(
+    database: MetadataDatabase,
+    sessionDir = path.join(getAgentDir(), "sessions")
+  ) {
     this.#database = database;
+    this.#sessionDir = sessionDir;
     this.projects = new PiProjectCatalog(database);
   }
 
-  async list(): Promise<readonly SessionInfo[]> {
-    const listed = await SessionManager.listAll();
+  list(): Promise<readonly SessionInfo[]> {
+    // Publication and client requests share one scan; neither may replay a full history scan concurrently.
+    this.#listing ??= this.#runList();
+    return this.#listing;
+  }
+
+  async #runList(): Promise<readonly SessionInfo[]> {
+    try {
+      return await this.#list();
+    } finally {
+      this.#listing = undefined;
+    }
+  }
+
+  async #list(): Promise<readonly SessionInfo[]> {
+    let directories: Dirent[];
+    try {
+      directories = await readdir(this.#sessionDir, { withFileTypes: true });
+    } catch (error) {
+      if (
+        !(error instanceof Error && "code" in error && error.code === "ENOENT")
+      ) {
+        throw error;
+      }
+      directories = [];
+    }
+    const directoryFiles = await Promise.all(
+      directories
+        .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+        .map(async (entry) => {
+          const directory = path.join(this.#sessionDir, entry.name);
+          try {
+            const entries = await readdir(directory);
+            return entries
+              .filter((file) => file.endsWith(".jsonl"))
+              .map((file) => path.join(directory, file));
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              "code" in error &&
+              (error.code === "ENOENT" || error.code === "ENOTDIR")
+            ) {
+              return [];
+            }
+            throw error;
+          }
+        })
+    );
+    const files = directoryFiles.flat();
+    const present = new Set(files);
+    for (const file of this.#summaries.keys()) {
+      if (!present.has(file)) {
+        this.#summaries.delete(file);
+      }
+    }
+    const listed: SessionInfo[] = [];
+    for (let offset = 0; offset < files.length; offset += 16) {
+      // eslint-disable-next-line no-await-in-loop -- Bound open files and concurrent JSONL parsing.
+      await Promise.all(
+        files.slice(offset, offset + 16).map(async (file) => {
+          try {
+            const stats = await stat(file);
+            const fingerprint = `${stats.dev}:${stats.ino}:${stats.size}:${stats.mtimeMs}:${stats.ctimeMs}`;
+            let cached = this.#summaries.get(file);
+            if (cached?.fingerprint !== fingerprint) {
+              const entries = parseSessionEntries(
+                await readFile(file, "utf-8")
+              ).filter((entry) => entry !== null);
+              const header = entries.find((entry) => entry.type === "session");
+              if (!header) {
+                this.#summaries.delete(file);
+                return;
+              }
+              const { activity, ...summary } = summarizeMessages(entries);
+              const created = new Date(header.timestamp);
+              cached = {
+                fingerprint,
+                info: {
+                  ...summary,
+                  created,
+                  cwd: header.cwd,
+                  id: header.id,
+                  modified: new Date(
+                    activity > 0
+                      ? Math.max(activity, created.getTime())
+                      : created.getTime()
+                  ),
+                  name:
+                    entries
+                      .findLast((entry) => entry.type === "session_info")
+                      ?.name?.trim() || undefined,
+                  parentSessionPath: header.parentSession,
+                  path: file,
+                },
+              };
+              this.#summaries.set(file, cached);
+            }
+            listed.push(cached.info);
+          } catch (error) {
+            if (error instanceof z.ZodError || error instanceof TypeError) {
+              this.#summaries.delete(file);
+              return;
+            }
+            if (
+              error instanceof Error &&
+              "code" in error &&
+              error.code === "ENOENT"
+            ) {
+              this.#summaries.delete(file);
+              return;
+            }
+            throw error;
+          }
+        })
+      );
+    }
     const sessions = listed.map((session) =>
       session.created > session.modified
         ? { ...session, modified: session.created }
         : session
     );
+    sessions.sort((a, b) => b.modified.getTime() - a.modified.getTime());
+    this.#persistCatalog(sessions);
+    return sessions;
+  }
+
+  #persistCatalog(sessions: readonly SessionInfo[]): void {
+    const projects = new Map<string, string | null>();
+    const updates: ThreadMetadata[] = [];
     for (const session of sessions) {
       const stored = this.#database.getThread(session.id);
-      this.#database.upsertThread({
+      if (!projects.has(session.cwd)) {
+        projects.set(session.cwd, this.projects.discover(session.cwd));
+      }
+      const projectId = this.projects.isAssigned(session.id)
+        ? (stored?.projectId ?? null)
+        : (stored?.projectId ?? projects.get(session.cwd) ?? null);
+      if (
+        stored &&
+        stored.projectId === projectId &&
+        stored.sessionFile === session.path &&
+        stored.updatedAt === session.modified.getTime()
+      ) {
+        continue;
+      }
+      updates.push({
         archived: stored?.archived ?? false,
-        projectId: this.projects.isAssigned(session.id)
-          ? (stored?.projectId ?? null)
-          : (stored?.projectId ?? this.projects.discover(session.cwd)),
+        projectId,
         sessionFile: session.path,
         threadId: session.id,
         updatedAt: session.modified.getTime(),
       });
     }
-    return sessions;
+    // One durable commit per refresh instead of one fsync per discovered session.
+    this.#database.upsertThreads(updates);
   }
 
   async load(threadId: string): Promise<SessionManager | undefined> {
@@ -147,7 +303,7 @@ export class PiSessionRepository {
       return undefined;
     }
     const created = new Date(header.timestamp);
-    const { activity, ...summary } = summarizeMessages(manager);
+    const { activity, ...summary } = summarizeMessages(manager.getEntries());
     if (activity > 0) {
       modified = new Date(
         Math.max(

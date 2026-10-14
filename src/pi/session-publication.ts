@@ -31,7 +31,11 @@ const readPolicies = async (
         .codexAppServer?.sessionExport ?? {}
     );
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ENOTDIR")
+    ) {
       return {};
     }
     throw new Error(`Invalid Pi session export settings: ${file}`, {

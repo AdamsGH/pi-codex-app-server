@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { AppServerConfig } from "../config/app-server-config.js";
 import { PiLiveSessionManager } from "../pi/live-session-manager.js";
 import { PiModelCatalog } from "../pi/model-catalog.js";
@@ -14,7 +16,10 @@ export const createAppServer = async (
   const database = new MetadataDatabase(config.paths.database);
   const piModelRuntime = await PiModelRuntime.create(config);
   const modelCatalog = new PiModelCatalog(piModelRuntime);
-  const sessionRepository = new PiSessionRepository(database);
+  const sessionRepository = new PiSessionRepository(
+    database,
+    path.join(config.piAgentDir, "sessions")
+  );
   const activity = { isWorking: (_id: string): boolean => false };
   const threadCatalog = new PiThreadCatalog({
     database,

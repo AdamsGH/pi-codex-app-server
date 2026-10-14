@@ -124,6 +124,17 @@ export class MetadataDatabase {
       .run();
   }
 
+  upsertThreads(metadata: readonly ThreadMetadata[]): void {
+    if (metadata.length === 0) {
+      return;
+    }
+    this.#database.transaction(() => {
+      for (const thread of metadata) {
+        this.upsertThread(thread);
+      }
+    });
+  }
+
   deleteThread(threadId: string): void {
     this.#database.delete(threads).where(eq(threads.threadId, threadId)).run();
   }

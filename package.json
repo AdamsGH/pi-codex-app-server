@@ -73,14 +73,14 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@earendil-works/chord": "1.1.0",
-    "@earendil-works/pi-agent-core": "1.1.0",
-    "@earendil-works/pi-ai": "1.1.0",
-    "@earendil-works/pi-codemode": "1.1.0",
-    "@earendil-works/pi-coding-agent": "1.1.0",
-    "@earendil-works/pi-mcp": "1.1.0",
-    "@earendil-works/pi-telemetry": "1.1.0",
-    "@earendil-works/pi-tui": "1.1.0",
+    "@earendil-works/chord": "1.2.0",
+    "@earendil-works/pi-agent-core": "1.2.0",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-codemode": "1.2.0",
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-mcp": "1.2.0",
+    "@earendil-works/pi-telemetry": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0",
     "@types/bun": "^1.2.21",
     "@types/node": "^24.3.0",
     "@types/proper-lockfile": "^4.1.4",
@@ -97,23 +97,23 @@
     "vitest": "^4.1.6"
   },
   "peerDependencies": {
-    "@earendil-works/chord": "~1.1.0",
-    "@earendil-works/pi-agent-core": "~1.1.0",
-    "@earendil-works/pi-ai": "~1.1.0",
-    "@earendil-works/pi-codemode": "~1.1.0",
-    "@earendil-works/pi-coding-agent": "~1.1.0",
-    "@earendil-works/pi-mcp": "~1.1.0",
-    "@earendil-works/pi-telemetry": "~1.1.0",
-    "@earendil-works/pi-tui": "~1.1.0"
+    "@earendil-works/chord": "~1.2.0",
+    "@earendil-works/pi-agent-core": "~1.2.0",
+    "@earendil-works/pi-ai": "~1.2.0",
+    "@earendil-works/pi-codemode": "~1.2.0",
+    "@earendil-works/pi-coding-agent": "~1.2.0",
+    "@earendil-works/pi-mcp": "~1.2.0",
+    "@earendil-works/pi-telemetry": "~1.2.0",
+    "@earendil-works/pi-tui": "~1.2.0"
   },
   "overrides": {
-    "@earendil-works/chord": "1.1.0",
-    "@earendil-works/pi-agent-core": "1.1.0",
-    "@earendil-works/pi-ai": "1.1.0",
-    "@earendil-works/pi-codemode": "1.1.0",
-    "@earendil-works/pi-mcp": "1.1.0",
-    "@earendil-works/pi-telemetry": "1.1.0",
-    "@earendil-works/pi-tui": "1.1.0"
+    "@earendil-works/chord": "1.2.0",
+    "@earendil-works/pi-agent-core": "1.2.0",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-codemode": "1.2.0",
+    "@earendil-works/pi-mcp": "1.2.0",
+    "@earendil-works/pi-telemetry": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0"
   },
   "engines": {
     "node": ">=22.19.0"

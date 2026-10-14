@@ -4,6 +4,10 @@ Use the same Pi session from the Pi terminal and Codex clients. Pi executes the 
 
 This is the [AdamsGH fork](https://github.com/AdamsGH/pi-codex-app-server) of [Lqm1/pi-codex-app-server](https://github.com/Lqm1/pi-codex-app-server). Its npm package is `@pi-switch/pi-codex-app-server`. The executable remains `pi-codex-app-server`. The unscoped npm package belongs to upstream and does not install this fork.
 
+![Pi and Codex CLI sharing the same session](docs/assets/pi-codex-session.gif)
+
+Pi remembers a code, Codex CLI resumes the same session and recalls it, and a final reply from Pi appears in both clients. Recorded with Pi 1.2.0 and Codex CLI 0.162.1. See [the recording instructions](docs/showcase.md) to reproduce it.
+
 ## Differences from upstream
 
 The comparison below uses upstream commit [`81f9d1b`](https://github.com/Lqm1/pi-codex-app-server/tree/81f9d1b1de2e942bc65df8cd830d10cf3d5a1340) as the fork baseline.
@@ -38,7 +42,7 @@ Pi's execution permissions apply. Codex sandbox and approval settings do not cre
 | Component            | Verified baseline                            |
 | -------------------- | -------------------------------------------- |
 | Node.js              | 22.19 or newer required; CI checks 24 and 26 |
-| Pi packages          | 1.1.0; declared peer range 1.1.x             |
+| Pi packages          | 1.2.0; declared peer range 1.2.x             |
 | Codex protocol / CLI | 0.162.1, recorded in the vendored manifest   |
 | Codex desktop        | Windows 26.1007.2314.0                       |
 | Development Bun      | 1.4.3                                        |
