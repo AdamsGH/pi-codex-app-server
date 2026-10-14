@@ -14,6 +14,11 @@ install:
 build:
     bun run build
 
+# Prepare and verify a candidate without publishing it.
+release-prepare:
+    bun run verify
+    bun run release:prepare
+
 # Run formatting checks, type checks, and tests.
 check:
     bun run check

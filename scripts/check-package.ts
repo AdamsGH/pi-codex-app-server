@@ -1,4 +1,6 @@
+import { constants } from "node:fs";
 import {
+  copyFile,
   mkdtemp,
   mkdir,
   readFile,
@@ -7,8 +9,25 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { parseArgs } from "node:util";
 
 import { z } from "zod";
+
+import {
+  releaseArtifactSchema,
+  verifyReleaseArtifact,
+} from "./release-artifact.js";
+
+const { values } = parseArgs({
+  options: {
+    archive: { type: "string" },
+    candidate: { type: "string" },
+    output: { type: "string" },
+  },
+});
+if ((values.archive || values.candidate) && values.output) {
+  throw new Error("Use archive or output, not both");
+}
 
 const root = path.resolve(import.meta.dir, "..");
 const manifest = z
@@ -62,6 +81,23 @@ const run = async (command: string[], cwd: string): Promise<string> => {
   return stdout;
 };
 try {
+  const candidate = values.candidate
+    ? path.resolve(values.candidate)
+    : undefined;
+  const candidateManifest = candidate
+    ? releaseArtifactSchema.parse(
+        JSON.parse(await readFile(candidate, "utf-8"))
+      )
+    : undefined;
+  let archive: string | undefined;
+  if (values.archive) {
+    archive = path.resolve(values.archive);
+  } else if (candidate && candidateManifest) {
+    archive = path.join(path.dirname(candidate), candidateManifest.filename);
+  }
+  if (values.candidate && archive) {
+    await verifyReleaseArtifact(path.resolve(values.candidate), archive, root);
+  }
   const [packed] = z
     .array(
       z.object({
@@ -75,14 +111,23 @@ try {
     .parse(
       JSON.parse(
         await run(
-          [
-            "npm",
-            "pack",
-            "--ignore-scripts",
-            "--json",
-            "--pack-destination",
-            workspace,
-          ],
+          archive
+            ? [
+                "npm",
+                "pack",
+                archive,
+                "--ignore-scripts",
+                "--dry-run",
+                "--json",
+              ]
+            : [
+                "npm",
+                "pack",
+                "--ignore-scripts",
+                "--json",
+                "--pack-destination",
+                workspace,
+              ],
           root
         )
       )
@@ -94,6 +139,7 @@ try {
   ) {
     throw new Error("Packed identity differs from package.json");
   }
+  const packageArchive = archive ?? path.join(workspace, packed.filename);
   const names = new Set(packed.files.map((file) => file.path));
   for (const required of [
     "dist/cli.js",
@@ -109,6 +155,8 @@ try {
     "docs/development.md",
     "docs/architecture.md",
     "docs/sidebar-sync.md",
+    "docs/assets/pi-codex-session.gif",
+    "docs/showcase.md",
     "vendor/openai-codex-app-server-protocol/protocol-snapshot.json",
     "vendor/openai-codex-app-server-protocol/UPSTREAM.md",
   ]) {
@@ -149,7 +197,7 @@ try {
       "--no-package-lock",
       "--no-audit",
       "--no-fund",
-      path.join(workspace, packed.filename),
+      packageArchive,
       ...peers,
     ],
     workspace
@@ -215,6 +263,22 @@ if (owners.some(file => file.endsWith(".json") || file.endsWith(".lock"))) throw
       );
     })
   );
+  if (values.candidate) {
+    await verifyReleaseArtifact(
+      path.resolve(values.candidate),
+      packageArchive,
+      root
+    );
+  }
+  if (values.output) {
+    const output = path.resolve(values.output);
+    await mkdir(output, { recursive: true });
+    await copyFile(
+      packageArchive,
+      path.join(output, packed.filename),
+      constants.COPYFILE_EXCL
+    );
+  }
   process.stdout.write(
     `${JSON.stringify({ cleanInstall: "passed", cli: "passed", extension: "passed", files: names.size, migrations: "passed", package: manifest.name, version: manifest.version })}\n`
   );

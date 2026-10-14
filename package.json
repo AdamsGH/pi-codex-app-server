@@ -55,6 +55,7 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "bun run verify",
     "package:check": "bun run ./scripts/check-package.ts",
+    "release:prepare": "bun run build && bun run ./scripts/prepare-release.ts",
     "verify": "bun run check && bun run typecheck && bun run test && bun run build && bun run package:check",
     "acceptance:sidebar": "node scripts/check-desktop-sidebar.mjs",
     "prepare": "husky"

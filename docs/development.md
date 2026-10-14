@@ -67,6 +67,16 @@ The script checks daemon and desktop availability before creating a synthetic Pi
 
 The fork package is `@pi-switch/pi-codex-app-server`; its CLI name remains `pi-codex-app-server`. Update version and changelog, verify the GitHub source URL, run `bun run verify`, and inspect the resulting package inventory. Generated contracts, migrations, documentation, and notices must be present. Runtime databases, auth files, fixtures, and local caches must be absent.
 
-No push or PR triggers npm publishing. After npm authorization is configured and publication is explicitly approved, publish the reviewed package with public scope access. `prepublishOnly` runs the verification sequence again. Verify the registry owner, version, contents, and source commit after publishing. npm organization access and GitHub access are independent.
+No push, tag, PR, or release preparation triggers npm publishing. Run the manual **Prepare release** workflow on `main`. It verifies the exact commit on Windows and Linux with Node 24 and 26, packs one candidate, and checks installation of that same archive on all four targets. The workflow only has read access to repository contents. It does not create tags or releases and has no publishing credentials.
+
+The `release-candidate` artifact contains the `.tgz`, `release.json` with source commit, version and SHA-256, and `SHA256SUMS`. Download it only from a successful preparation run. Check that its source commit and digest match before creating `v<version>` and a draft GitHub Release with the same files. Tag the recorded commit, not the current moving branch head. Record Desktop acceptance in the release notes; iOS hardware testing is optional under [ADR 0004](adr/0004-require-chatgpt-mobile-remote.md).
+
+For local preparation, run `just release-prepare` from a clean checkout. Output is `out/release/`. Repeating preparation verifies an existing matching candidate instead of replacing it. A candidate from another commit or with a changed checksum fails. CI artifacts are the release source; local output is for diagnostics.
+
+```sh
+bun run package:check --candidate /absolute/path/to/candidate/release.json
+```
+
+After explicit npm publication approval, publish the downloaded `.tgz` with public scope access. Publishing a tarball does not run the repository's `prepublishOnly` hook, so the explicit artifact checks above are required. Verify registry owner, version, integrity and a fresh Pi installation before making the GitHub Release public. If publication reports an uncertain outcome, inspect the registry before retrying. npm organization access and GitHub access are independent.
 
 The first scoped fork release is prepared as 0.2.0. Earlier changelog entries are upstream history. Preserve attribution and license notices when maintaining the fork.
