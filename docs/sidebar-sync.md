@@ -71,7 +71,46 @@ Version 2 snapshots contain project roots, names, session IDs, project assignmen
 
 The default endpoint respects `PI_CODEX_APP_SERVER_HOME` and `PI_CODING_AGENT_DIR`. `--help` lists each command's options.
 
-The snapshot includes only sessions allowed by [Pi session publication settings](session-export.md). Apply withdraws saved session references owned by the selected host when they are absent from the full snapshot. Export a fresh snapshot after policy changes; the plan reports the withdrawal count. Pi history and session files are not changed.
+The snapshot includes only sessions allowed by [Pi session publication settings](session-export.md). Apply withdraws saved session references owned by the selected host when they are absent from the full snapshot. Export a fresh snapshot after policy changes; the plan reports the withdrawal count. Pi history and session files are not changed. The `just` export recipes omit projects without published sessions, so recovery does not register unrelated empty repositories. Existing desktop project registrations are preserved. Direct CLI exports include all projects unless `--skip-empty-projects` is specified.
+
+## Recover saved references after publication changes
+
+Use the same export, preview, apply, and restore commands for any connected Pi host. They also repair stale custom-section order. Keep the intended Pi sessions open when publication is `active`; an empty catalog withdraws all saved session references belonging to the selected host. Check `hostId` and `withdrawnThreads` in the preview before applying.
+
+For a daemon on the desktop machine:
+
+```sh
+just sidebar-preview
+```
+
+For WSL, first update and build this repository inside the target distribution. From the Windows checkout, supply that distribution's name and its Linux checkout path:
+
+```powershell
+just sidebar-preview-wsl Ubuntu /home/your-user/tools/pi-codex-app-server
+```
+
+This runs the Linux CLI through `wsl.exe --exec`, validates its JSON output, atomically saves the snapshot on Windows, and previews the import. It does not require localhost port forwarding. A failed export leaves the previous snapshot intact. `just sidebar-export-wsl <distribution> <repository>` exports without preview; `just sidebar-export` does the same for the local daemon.
+
+Close Codex completely and use an external terminal to apply the saved candidate:
+
+```sh
+just sidebar-plan
+just sidebar-apply
+```
+
+Apply does not contact the daemon or require WSL to remain connected. It refuses writes while Codex is running, checks for concurrent state changes, creates a backup, and verifies the replacement. It does not delete Pi history. Reopen Codex after success. Restore a backup with Codex closed using `just sidebar-restore <backup>`.
+
+Set host selection and snapshot settings in an ignored `.env` file, especially when working with multiple hosts:
+
+```dotenv
+PI_CODEX_HOST_ID=remote-control:YOUR_HOST_ID
+PI_SIDEBAR_SNAPSHOT=.cache/pi-sidebar.snapshot.json
+PI_SIDEBAR_SECTION=Pi
+```
+
+Host inference is used when `PI_CODEX_HOST_ID` is absent; ambiguous ownership aborts. `PI_SIDEBAR_ENDPOINT` selects another local endpoint file or WebSocket URL. WSL export uses the Linux checkout's normal daemon endpoint configuration. For SSH hosts, run `just sidebar-export` on the source, copy the resulting snapshot to the desktop checkout's configured snapshot path, then run `just sidebar-plan` and `just sidebar-apply` there.
+
+For scripted transport, `node dist/sidebar-sync.js export --stdout` emits only snapshot JSON. `--stdout` and `--output` are mutually exclusive. Snapshots contain metadata, not conversation text or credentials.
 
 Existing projects are matched by host and normalized root. Windows roots ignore case and slash direction; Unix roots retain case. Existing project IDs and labels are preserved. In the destination section, projects appear before individual chats and retain their relative order. Imported chats are ordered by last activity, newest first. Equal timestamps retain their previous order. Chats outside the snapshot keep their slots among the individual chats. Repeating an import produces the same state. Importing additional repositories adds entries without deleting unrelated projects.
 

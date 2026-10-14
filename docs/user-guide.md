@@ -23,7 +23,7 @@ Use Pi's `/login` to configure the `openai-codex` OAuth provider. An API key is 
 
 The adapter needs the connected Pi host ID, desktop destination section ID, and a real local caller task ID. Desktop section IDs differ from backend section IDs. Native `list_threads` supplies desktop organization IDs. A desktop-launched task receives its caller and initial endpoint through `CODEX_THREAD_ID` and `CODEX_APP_TOOLS_PIPE_PATH`.
 
-Repository entries also require desktop's saved project catalog. Use the [offline importer](sidebar-sync.md) for initial registration. Preview with desktop open; apply only after closing it. A verified backup is created. The live adapter performs native operations and does not edit the desktop state file.
+Repository entries also require desktop's saved project catalog. Use the [offline importer](sidebar-sync.md) for initial registration and [recovery of stale session references](sidebar-sync.md#recover-saved-references-after-publication-changes). On the desktop machine, run `just sidebar-preview`; for a WSL source, run `just sidebar-preview-wsl <distribution> <Linux-checkout>`. After reviewing the plan, close desktop and run `just sidebar-apply` from an external terminal. A verified backup is created. The live adapter performs native operations and does not edit the desktop state file.
 
 ## Control commands
 

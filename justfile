@@ -29,9 +29,20 @@ check:
 daemon: build
     node dist/cli.js daemon
 
+# Export publication metadata without changing desktop state.
+sidebar-export: build
+    node dist/sidebar-sync.js export --output "{{snapshot}}" --skip-empty-projects --overwrite
+
 # Save a fresh snapshot and preview the import. Codex can remain open.
-sidebar-preview: build
-    node dist/sidebar-sync.js export --output "{{snapshot}}" --overwrite
+sidebar-preview: sidebar-export
+    node dist/sidebar-sync.js apply --input "{{snapshot}}" --dry-run
+
+# Export from a built WSL checkout to the desktop machine. Run on Windows.
+sidebar-export-wsl distribution repository: build
+    node dist/sidebar-sync.js export-wsl --distribution "{{distribution}}" --repository "{{repository}}" --output "{{snapshot}}" --skip-empty-projects --overwrite
+
+# Export and preview WSL publication without editing desktop state.
+sidebar-preview-wsl distribution repository: (sidebar-export-wsl distribution repository)
     node dist/sidebar-sync.js apply --input "{{snapshot}}" --dry-run
 
 # Preview the saved snapshot without connecting to the daemon.

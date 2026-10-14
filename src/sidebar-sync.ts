@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -7,6 +6,11 @@ import { Command } from "commander";
 import { z } from "zod";
 
 import { assertDesktopStopped } from "./sidebar/desktop-processes.js";
+import {
+  filterSidebarProjects,
+  readWslSidebarSnapshot,
+  saveSidebarSnapshot,
+} from "./sidebar/sidebar-export.js";
 import {
   parseSidebarFile,
   replaceSidebarFile,
@@ -20,14 +24,16 @@ import {
 import type { SidebarSnapshot } from "./sidebar/sidebar-state.js";
 
 const defaultHome = process.env.CODEX_HOME ?? path.join(homedir(), ".codex");
-const defaultEndpoint = path.join(
-  process.env.PI_CODEX_APP_SERVER_HOME ??
-    path.join(
-      process.env.PI_CODING_AGENT_DIR ?? path.join(homedir(), ".pi", "agent"),
-      "codex-app-server"
-    ),
-  "endpoint.json"
-);
+const defaultEndpoint =
+  process.env.PI_SIDEBAR_ENDPOINT ??
+  path.join(
+    process.env.PI_CODEX_APP_SERVER_HOME ??
+      path.join(
+        process.env.PI_CODING_AGENT_DIR ?? path.join(homedir(), ".pi", "agent"),
+        "codex-app-server"
+      ),
+    "endpoint.json"
+  );
 const importOptionsSchema = z.object({
   accountId: z.string().optional(),
   codexHome: z.string(),
@@ -90,29 +96,70 @@ export const runSidebarSync = async (
       "App-server endpoint file or WebSocket URL",
       defaultEndpoint
     )
-    .requiredOption("--output <file>", "Snapshot to create")
+    .option("--output <file>", "Snapshot to create")
+    .option("--stdout", "Write only snapshot JSON to stdout", false)
+    .option(
+      "--skip-empty-projects",
+      "Export only projects referenced by published sessions",
+      false
+    )
     .option("--overwrite", "Atomically replace an existing snapshot", false)
     .action(
       async (options: {
         endpoint: string;
+        output?: string;
+        overwrite: boolean;
+        stdout: boolean;
+        skipEmptyProjects: boolean;
+      }) => {
+        if (options.stdout === Boolean(options.output)) {
+          throw new Error("Specify exactly one of --output or --stdout");
+        }
+        const snapshot = filterSidebarProjects(
+          await readSidebarSnapshot(options.endpoint),
+          options.skipEmptyProjects
+        );
+        if (options.stdout) {
+          process.stdout.write(`${JSON.stringify(snapshot)}\n`);
+          return;
+        }
+        await saveSidebarSnapshot(
+          snapshot,
+          z.string().parse(options.output),
+          options.overwrite
+        );
+        process.stdout.write(
+          `Exported ${snapshot.projects.length} projects and ${snapshot.threads.length} sessions to ${options.output}\n`
+        );
+      }
+    );
+  program
+    .command("export-wsl")
+    .requiredOption(
+      "--distribution <name>",
+      "WSL distribution containing the Pi daemon"
+    )
+    .requiredOption(
+      "--repository <path>",
+      "Built repository checkout inside WSL"
+    )
+    .requiredOption("--output <file>", "Local snapshot to create")
+    .option(
+      "--skip-empty-projects",
+      "Export only projects referenced by published sessions",
+      false
+    )
+    .option("--overwrite", "Atomically replace an existing snapshot", false)
+    .action(
+      async (options: {
+        distribution: string;
+        repository: string;
         output: string;
         overwrite: boolean;
+        skipEmptyProjects: boolean;
       }) => {
-        const snapshot = await readSidebarSnapshot(options.endpoint);
-        const output = path.resolve(options.output);
-        await mkdir(path.dirname(output), { recursive: true });
-        const serialized = `${JSON.stringify(snapshot, null, 2)}\n`;
-        if (options.overwrite) {
-          const temporary = `${output}.${randomUUID()}.tmp`;
-          try {
-            await writeFile(temporary, serialized, { flag: "wx", mode: 0o600 });
-            await rename(temporary, output);
-          } finally {
-            await rm(temporary, { force: true });
-          }
-        } else {
-          await writeFile(output, serialized, { flag: "wx", mode: 0o600 });
-        }
+        const snapshot = await readWslSidebarSnapshot(options);
+        await saveSidebarSnapshot(snapshot, options.output, options.overwrite);
         process.stdout.write(
           `Exported ${snapshot.projects.length} projects and ${snapshot.threads.length} sessions to ${options.output}\n`
         );
@@ -130,7 +177,11 @@ export const runSidebarSync = async (
         "Desktop state directory",
         defaultHome
       )
-      .option("--section <name>", "Destination sidebar section", "Pi")
+      .option(
+        "--section <name>",
+        "Destination sidebar section",
+        process.env.PI_SIDEBAR_SECTION ?? "Pi"
+      )
       .option(
         "--account-id <id>",
         "Sidebar account to change; inferred only when unambiguous"

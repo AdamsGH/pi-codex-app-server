@@ -12,6 +12,8 @@
 - Verify pull requests and package installation before release.
 - Target Pi 1.2.0 with matching SDK dependencies and a 1.2.x peer contract.
 - Reuse unchanged session summaries, coalesce catalog scans, and batch metadata writes during client startup.
+- Publish only active sessions by default and refresh recent desktop section order across hosts.
+- Add reusable `just` sidebar recovery commands for local, WSL, and exported remote catalogs, with preview, backup, and offline apply.
 
 The releases below are retained upstream history from Lqm1/pi-codex-app-server.
 
