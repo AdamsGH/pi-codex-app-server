@@ -191,6 +191,9 @@ const appendMessage = (
   cwd: string
 ): void => {
   const { message } = entry;
+  if (message.role === "system") {
+    return;
+  }
   switch (message.role) {
     case "user": {
       state.turn.items.push({

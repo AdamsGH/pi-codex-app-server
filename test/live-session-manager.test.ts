@@ -72,6 +72,19 @@ const fixture = (home?: string) => {
   const sessionRepository = new PiSessionRepository(database);
   const sessionManager = SessionManager.inMemory("/synthetic");
   vi.spyOn(sessionRepository, "load").mockResolvedValue(sessionManager);
+  vi.spyOn(sessionRepository, "read").mockResolvedValue({
+    info: {
+      allMessagesText: "",
+      created: new Date(0),
+      cwd: "/synthetic",
+      firstMessage: "",
+      id: "thread",
+      messageCount: 0,
+      modified: new Date(0),
+      path: "/synthetic/session.jsonl",
+    },
+    manager: sessionManager,
+  });
   const threadCatalog = new PiThreadCatalog({ database, sessionRepository });
   const manager = new PiLiveSessionManager({
     home,

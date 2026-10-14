@@ -184,19 +184,35 @@ const main = async (): Promise<void> => {
   const protocolDirectory = readArgument("--protocol");
   const schemaDirectory = readArgument("--schemas");
   const outputPath = readArgument("--output");
+  const importOutput = process.argv.includes("--import-output")
+    ? readArgument("--import-output")
+    : outputPath;
+  const importProtocol = process.argv.includes("--import-protocol")
+    ? readArgument("--import-protocol")
+    : protocolDirectory;
+  const importSchemas = process.argv.includes("--import-schemas")
+    ? readArgument("--import-schemas")
+    : schemaDirectory;
+  const protocolImport = (file: string): string =>
+    relativeImport(
+      importOutput,
+      path.join(importProtocol, path.relative(protocolDirectory, file))
+    );
+  const schemaImport = (file: string): string =>
+    relativeImport(
+      importOutput,
+      path.join(importSchemas, path.relative(schemaDirectory, file))
+    );
   const commonSource = await Bun.file(commonSourcePath).text();
   const typeFiles = await listFiles(protocolDirectory, ".ts");
   const responseFiles = new Map(
-    typeFiles.map((file) => [
-      path.basename(file, ".ts"),
-      relativeImport(outputPath, file),
-    ])
+    typeFiles.map((file) => [path.basename(file, ".ts"), protocolImport(file)])
   );
   const responseSchemaFiles = await listFiles(schemaDirectory, ".json");
   const schemaFiles = new Map(
     responseSchemaFiles.map((file) => [
       path.basename(file, ".json"),
-      relativeImport(outputPath, file),
+      schemaImport(file),
     ])
   );
 
@@ -220,7 +236,7 @@ const main = async (): Promise<void> => {
     return renderMap(
       mapName,
       requestTypeName,
-      relativeImport(outputPath, requestFile),
+      protocolImport(requestFile),
       definitions,
       responseFiles,
       schemaFiles

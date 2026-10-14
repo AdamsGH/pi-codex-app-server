@@ -388,9 +388,8 @@ export class AppServer {
           ),
         };
       }
-      const sessionManager = await this.#sessionRepository.load(
-        params.threadId
-      );
+      const restored = await this.#sessionRepository.read(params.threadId);
+      const sessionManager = restored?.manager;
       const thread = await this.#threadCatalog.read(params.threadId, true);
       if (!(sessionManager && thread)) {
         throw new Error(`Thread not found: ${params.threadId}`);

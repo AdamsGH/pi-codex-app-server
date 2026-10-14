@@ -1,7 +1,10 @@
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import {
+  SessionManager,
+  parseSessionEntries,
+} from "@earendil-works/pi-coding-agent";
 import type {
   SessionEntry,
   SessionInfo,
@@ -107,13 +110,26 @@ export class PiSessionRepository {
       }
     | undefined
   > {
-    const manager = await this.load(threadId);
-    const metadata = this.#database.getThread(threadId);
-    if (!(manager && metadata)) {
+    let metadata = this.#database.getThread(threadId);
+    if (!metadata) {
+      await this.list();
+      metadata = this.#database.getThread(threadId);
+    }
+    if (!metadata) {
       return undefined;
     }
     let modified: Date;
+    let manager: SessionManager;
     try {
+      const entries = parseSessionEntries(
+        await readFile(metadata.sessionFile, "utf-8")
+      );
+      const header = entries.find((entry) => entry.type === "session");
+      if (!header || header.id !== threadId) {
+        return undefined;
+      }
+      // SessionManager.open repairs JSONL on disk. Catalog reads must not mutate the owner's file.
+      manager = SessionManager.inMemory(header.cwd, undefined, entries);
       const stats = await stat(metadata.sessionFile);
       modified = stats.mtime;
     } catch (error) {

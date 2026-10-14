@@ -11,7 +11,7 @@ const packageManifestSchema = z.object({
 });
 
 describe("package manifest", () => {
-  it("uses host-provided Pi packages as wildcard peers", async () => {
+  it("uses supported host-provided Pi packages and a consistent development SDK", async () => {
     const manifestContents = await readFile(
       new URL("../package.json", import.meta.url),
       "utf-8"
@@ -24,8 +24,8 @@ describe("package manifest", () => {
       "@earendil-works/pi-tui",
     ]) {
       expect(manifest.dependencies).not.toHaveProperty(name);
-      expect(manifest.peerDependencies[name]).toBe("*");
-      expect(manifest.devDependencies[name]).toBe("^0.84.2");
+      expect(manifest.peerDependencies[name]).toBe("~1.1.0");
+      expect(manifest.devDependencies[name]).toBe("1.1.0");
     }
     expect(manifest.pi.extensions).toStrictEqual(["./src/extension/index.ts"]);
   });

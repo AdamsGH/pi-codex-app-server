@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 (fork, unreleased)
+
+- Publish the fork identity as `@pi-switch/pi-codex-app-server`, retaining the `pi-codex-app-server` command.
+- Share native Pi TUI sessions with Codex through a single-writer owner bridge.
+- Recover desktop history, runtime status, and relay sequence state across reconnects.
+- Synchronize newly published chats through native desktop host tools.
+- Add session publication controls and protocol generation with verified artifact digests.
+- Remove the bundled skill collection and replace generic guidance with project contracts.
+- Add user, architecture, development, packaging, and acceptance documentation.
+- Verify pull requests and package installation before release.
+
+The releases below are retained upstream history from Lqm1/pi-codex-app-server.
+
 ## [0.1.1](https://github.com/Lqm1/pi-codex-app-server/compare/pi-codex-app-server-v0.1.0...pi-codex-app-server-v0.1.1) (2026-08-24)
 
 

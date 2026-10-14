@@ -1,0 +1,11 @@
+Pi Codex App Server
+
+This fork is maintained at https://github.com/AdamsGH/pi-codex-app-server
+and is based on https://github.com/Lqm1/pi-codex-app-server.
+
+The vendored Codex app-server protocol is generated from OpenAI Codex.
+Its source release, commit, and artifact digests are recorded in
+vendor/openai-codex-app-server-protocol/protocol-snapshot.json.
+Upstream notices in generated files are preserved.
+
+The repository retains the upstream Apache License 2.0 in LICENSE.

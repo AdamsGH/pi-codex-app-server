@@ -2,7 +2,6 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { describe, expect, test, vi } from "vitest";
 
 import type { AppServerConfig } from "../src/config/app-server-config.js";
@@ -91,8 +90,8 @@ describe("Thread history", () => {
       };
       const sessionRepository = new PiSessionRepository(database);
       // Never enumerate the user's real Pi sessions.
-      vi.spyOn(sessionRepository, "list").mockResolvedValue(
-        await SessionManager.list("/workspace", directory)
+      vi.spyOn(sessionRepository, "list").mockRejectedValue(
+        new Error("History reads must not enumerate sessions")
       );
       database.upsertThread({
         archived: false,

@@ -1,6 +1,6 @@
 {
-  "name": "pi-codex-app-server",
-  "version": "0.1.1",
+  "name": "@pi-switch/pi-codex-app-server",
+  "version": "0.2.0",
   "description": "Expose Pi Coding Agent through the Codex App Server and ChatGPT Remote protocols.",
   "keywords": [
     "app-server",
@@ -9,14 +9,14 @@
     "pi-coding-agent",
     "pi-package"
   ],
-  "homepage": "https://github.com/Lqm1/pi-codex-app-server#readme",
+  "homepage": "https://github.com/AdamsGH/pi-codex-app-server#readme",
   "bugs": {
-    "url": "https://github.com/Lqm1/pi-codex-app-server/issues"
+    "url": "https://github.com/AdamsGH/pi-codex-app-server/issues"
   },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Lqm1/pi-codex-app-server.git"
+    "url": "git+https://github.com/AdamsGH/pi-codex-app-server.git"
   },
   "bin": {
     "pi-codex-app-server": "./dist/cli.js"
@@ -27,7 +27,9 @@
     "src",
     "vendor/openai-codex-app-server-protocol",
     "README.md",
-    "CONTEXT.md"
+    "docs",
+    "NOTICE",
+    "CHANGELOG.md"
   ],
   "type": "module",
   "module": "./dist/index.js",
@@ -51,7 +53,11 @@
     "sidebar": "bun run ./scripts/sync-codex-sidebar.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run verify",
+    "package:check": "bun run ./scripts/check-package.ts",
+    "verify": "bun run check && bun run typecheck && bun run test && bun run build && bun run package:check",
+    "acceptance:sidebar": "node scripts/check-desktop-sidebar.mjs",
+    "prepare": "husky"
   },
   "dependencies": {
     "@logtape/logtape": "^2.3.2",
@@ -67,9 +73,14 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^0.84.2",
-    "@earendil-works/pi-coding-agent": "^0.84.2",
-    "@earendil-works/pi-tui": "^0.84.2",
+    "@earendil-works/chord": "1.1.0",
+    "@earendil-works/pi-agent-core": "1.1.0",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-codemode": "1.1.0",
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@earendil-works/pi-mcp": "1.1.0",
+    "@earendil-works/pi-telemetry": "1.1.0",
+    "@earendil-works/pi-tui": "1.1.0",
     "@types/bun": "^1.2.21",
     "@types/node": "^24.3.0",
     "@types/proper-lockfile": "^4.1.4",
@@ -86,13 +97,28 @@
     "vitest": "^4.1.6"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*"
+    "@earendil-works/chord": "~1.1.0",
+    "@earendil-works/pi-agent-core": "~1.1.0",
+    "@earendil-works/pi-ai": "~1.1.0",
+    "@earendil-works/pi-codemode": "~1.1.0",
+    "@earendil-works/pi-coding-agent": "~1.1.0",
+    "@earendil-works/pi-mcp": "~1.1.0",
+    "@earendil-works/pi-telemetry": "~1.1.0",
+    "@earendil-works/pi-tui": "~1.1.0"
+  },
+  "overrides": {
+    "@earendil-works/chord": "1.1.0",
+    "@earendil-works/pi-agent-core": "1.1.0",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-codemode": "1.1.0",
+    "@earendil-works/pi-mcp": "1.1.0",
+    "@earendil-works/pi-telemetry": "1.1.0",
+    "@earendil-works/pi-tui": "1.1.0"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.19.0"
   },
+  "packageManager": "bun@1.4.3",
   "pi": {
     "extensions": [
       "./src/extension/index.ts"
