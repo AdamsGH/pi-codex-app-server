@@ -29,11 +29,62 @@ const requestSchema = z.object({
     .object({
       archived: z.boolean().optional(),
       cursor: z.string().nullable().optional(),
+      sectionId: z.string().optional(),
     })
     .optional(),
 });
 
 describe("Sidebar source", () => {
+  test("limits desktop reconciliation to active members of the Pi server section", async () => {
+    const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+    const selections: { archived?: boolean; sectionId?: string }[] = [];
+    server.on("connection", (socket) => {
+      socket.on("message", (raw) => {
+        const request = requestSchema.parse(JSON.parse(raw.toString()));
+        let result: FixtureResult = { data: [], nextCursor: null };
+        if (request.method === "initialize") {
+          result = { codexHome: "/pi" };
+        }
+        if (request.method === "threadSection/list") {
+          result = {
+            data: [{ id: "pi-section", name: "Pi" }],
+            nextCursor: null,
+          };
+        }
+        if (request.method === "thread/list") {
+          selections.push({
+            archived: request.params?.archived,
+            sectionId: request.params?.sectionId,
+          });
+          result = {
+            data: [{ id: "pi-chat", projectId: null, updatedAt: 5 }],
+            nextCursor: null,
+          };
+        }
+        socket.send(JSON.stringify({ id: request.id, result }));
+      });
+    });
+    await once(server, "listening");
+    try {
+      const address = z.object({ port: z.number() }).parse(server.address());
+      const snapshot = await readSidebarSnapshot(
+        `ws://127.0.0.1:${address.port}`,
+        { sectionOnly: true }
+      );
+      expect(snapshot.threads.map((thread) => thread.id)).toStrictEqual([
+        "pi-chat",
+      ]);
+      expect(selections).toStrictEqual([
+        { archived: false, sectionId: "pi-section" },
+      ]);
+    } finally {
+      for (const client of server.clients) {
+        client.terminate();
+      }
+      await promisify(server.close.bind(server))();
+    }
+  });
+
   test("reports how to recover a stale daemon endpoint", async () => {
     const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
     await once(server, "listening");

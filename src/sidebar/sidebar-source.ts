@@ -25,7 +25,8 @@ const pageSchema = z.object({
 type PageItem = z.infer<typeof pageSchema>["data"][number];
 
 export const readSidebarSnapshot = async (
-  endpoint: string
+  endpoint: string,
+  options: { readonly sectionOnly?: boolean } = {}
 ): Promise<SidebarSnapshot> => {
   const url =
     endpoint.startsWith("ws://") || endpoint.startsWith("wss://")
@@ -87,7 +88,7 @@ export const readSidebarSnapshot = async (
     );
     const pages = async (
       method: string,
-      extra: { archived?: boolean } = {}
+      extra: { archived?: boolean; sectionId?: string } = {}
     ): Promise<PageItem[]> => {
       const data: PageItem[] = [];
       const cursors = new Set<string>();
@@ -116,8 +117,15 @@ export const readSidebarSnapshot = async (
     const sections = z
       .array(z.object({ id: z.string(), name: z.string() }))
       .parse(await pages("threadSection/list"));
-    const active = await pages("thread/list", { archived: false });
-    const archived = await pages("thread/list", { archived: true });
+    const sectionId = sections.find(({ name }) => name === "Pi")?.id;
+    if (options.sectionOnly && !sectionId) {
+      throw new Error("Pi publication section is unavailable");
+    }
+    const filter = options.sectionOnly ? { sectionId } : {};
+    const active = await pages("thread/list", { ...filter, archived: false });
+    const archived = options.sectionOnly
+      ? []
+      : await pages("thread/list", { archived: true });
     const threadMap = new Map(
       [
         ...active.map((thread) =>

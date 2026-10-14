@@ -10,6 +10,7 @@ import { WebSocketServer } from "ws";
 import { z } from "zod";
 
 import type { AppServerConfig } from "../config/app-server-config.js";
+import { startManagedDesktopSync } from "../desktop/managed-sync.js";
 import { appServerLogger } from "../logging/app-server-logger.js";
 import { JsonRpcConnection } from "../protocol/json-rpc-connection.js";
 import { RemoteControlRelay } from "../remote/relay.js";
@@ -76,6 +77,7 @@ const runLockedDaemon = async (config: AppServerConfig): Promise<void> => {
     port: portSchema.parse(config.listenUrl.port || "0"),
   });
   const clientTasks = new Set<Promise<void>>();
+  let stopDesktopSync: (() => void) | undefined;
   webSocketServer.on("connection", (socket) => {
     clientTasks.add(handleSocket(socket, appServer, appServerLogger));
   });
@@ -97,6 +99,15 @@ const runLockedDaemon = async (config: AppServerConfig): Promise<void> => {
       { mode: 0o600 }
     );
     process.stdout.write(`${endpointUrl}\n`);
+    try {
+      stopDesktopSync = await startManagedDesktopSync(config);
+    } catch (error) {
+      appServerLogger.warn(
+        error instanceof Error
+          ? error
+          : new Error("Desktop sync startup failed")
+      );
+    }
     const stopDaemon = (): void => {
       remoteControlRelay.close();
       for (const client of webSocketServer.clients) {
@@ -109,6 +120,7 @@ const runLockedDaemon = async (config: AppServerConfig): Promise<void> => {
     await once(webSocketServer, "close");
     await Promise.allSettled(clientTasks);
   } finally {
+    stopDesktopSync?.();
     remoteControlRelay.close();
     await remoteControlTask;
     appServer.close();

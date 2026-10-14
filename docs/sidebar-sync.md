@@ -77,7 +77,34 @@ Existing projects are matched by host and normalized root. Windows roots ignore 
 
 Custom sections retain an explicit desktop item order. Changing the global chat sorting preference does not repair that saved order. The import refreshes it from source activity timestamps; it does not continuously reorder an open desktop app.
 
-Codex desktop 26.1007.2314 also caches server section membership separately from conversation state. Receiving `thread/started` adds a conversation but does not invalidate the custom-section thread query. A desktop section move invalidates that query and updates the saved section items. Server publication acknowledgements therefore do not prove that a new native Pi session appears in the custom Pi section. Automatic custom-section discovery remains an acceptance blocker; the server must not patch desktop files or rewrite its saved state while the app is running.
+Codex desktop 26.1007.2314 also caches server section membership separately from conversation state. Receiving `thread/started` adds a conversation but does not invalidate the custom-section thread query. A native desktop section move invalidates that query and updates the saved section items. Server publication acknowledgements therefore do not prove that a new native Pi session appears in the custom Pi section. The live adapter below uses the native desktop operation. It does not patch desktop files or rewrite its saved state.
+
+## Live desktop adapter
+
+Build with `bun run build`. From a desktop-launched task, verify the adapter once:
+
+```powershell
+node dist/desktop-sync.js --host-id <connected-Pi-host> --section-id <desktop-Pi-section> --once
+```
+
+The caller task defaults to `CODEX_THREAD_ID`, and the initial host-tools endpoint defaults to `CODEX_APP_TOOLS_PIPE_PATH`. An external terminal must supply its actual registered caller through `--caller-thread-id`. Use the desktop section ID from `list_threads`, not the backend's `threadSection/list` ID. The configured host must own the selected Pi daemon.
+
+For automatic lifecycle management, create `desktop-sync.json` in the app-server home:
+
+```json
+{
+  "enabled": true,
+  "hostId": "connected-Pi-host",
+  "sectionId": "desktop-Pi-section",
+  "callerThreadId": "actual-local-caller-task"
+}
+```
+
+On its next start, the daemon launches and supervises the adapter. No desktop restart is needed. Stop the adapter by setting `enabled` to false before the next daemon start. Pi continues to own agent execution; this process only reads publication metadata and performs sidebar operations.
+
+The adapter reconciles every five seconds after the preceding pass completes. It selects active members of the server's Pi section, skips project-assigned sessions, preserves existing custom-section and pinned placements, and inserts missing chats before the first chat in the desktop Pi section. Projects keep their slots. Repeated passes leave existing order unchanged. Each successful move requires a subsequent desktop membership confirmation. A failed or timed-out write is not blindly replayed; the next pass reads membership first.
+
+On Windows, endpoint discovery verifies the named pipe's owning process against the installed OpenAI.Codex main executable. A valid supplied endpoint wins. After it disappears, discovery requires exactly one verified candidate; ambiguity prevents writes. The tool catalog is checked again after reconnection. Other platforms require an explicit endpoint. The native transport is a private, version-sensitive desktop interface, so desktop updates require compatibility verification. Backend availability and visible running/completed behavior remain separate checks.
 
 The snapshot's project assignments are authoritative for its sessions. Assigned sessions appear under their repository projects. Unassigned sessions go directly into the selected section. Imported sessions are removed from Pinned. Archived sessions retain assignments but do not become direct sidebar entries. Ownership conflicts with another host, duplicate roots or section names, unknown project references, and ambiguous accounts abort before writing.
 

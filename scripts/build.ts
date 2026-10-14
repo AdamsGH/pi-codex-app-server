@@ -24,6 +24,7 @@ const libraryBuild = await Bun.build({
     path.resolve(root, "src/extension/index.ts"),
     path.resolve(root, "src/runtime/pi-module-loader.ts"),
     path.resolve(root, "src/runtime/pi-module-hooks.ts"),
+    path.resolve(root, "src/desktop/native-tools.ts"),
   ],
   naming: "[dir]/[name].[ext]",
   outdir: path.resolve(root, "dist"),
@@ -36,6 +37,7 @@ const cliBuild = await Bun.build({
   entrypoints: [
     path.resolve(root, "src/cli.ts"),
     path.resolve(root, "src/sidebar-sync.ts"),
+    path.resolve(root, "src/desktop-sync.ts"),
   ],
   outdir: path.resolve(root, "dist"),
 });
