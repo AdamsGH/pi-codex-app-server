@@ -141,6 +141,36 @@ For automatic lifecycle management, create `desktop-sync.json` in the app-server
 
 On its next start, the daemon launches and supervises the adapter. No desktop restart is needed. Stop the adapter by setting `enabled` to false before the next daemon start. Pi continues to own agent execution; this process only reads publication metadata and performs sidebar operations.
 
+One desktop-side adapter can reconcile several Pi hosts. Add a `sources` array to that same configuration:
+
+```json
+{
+  "enabled": true,
+  "hostId": "connected-Windows-Pi-host",
+  "sectionId": "desktop-Pi-section",
+  "callerThreadId": "actual-local-caller-task",
+  "sources": [
+    {
+      "hostId": "connected-Windows-Pi-host",
+      "endpoint": "C:/path/to/pi-agent/codex-app-server/endpoint.json"
+    },
+    {
+      "hostId": "connected-WSL-Pi-host",
+      "wsl": {
+        "distribution": "Ubuntu",
+        "repository": "/home/your-user/tools/pi-codex-app-server"
+      }
+    }
+  ]
+}
+```
+
+Each source needs its actual connected desktop host ID. `endpoint` accepts a daemon endpoint file or WebSocket URL reachable from the desktop machine. WSL sources run the built Linux CLI through `wsl.exe` and do not require localhost forwarding. Both checkouts must include the multi-source adapter update. Publication and backend Pi-section membership determine eligible chats; the adapter does not scan session files or import history independently.
+
+If the daemon inherited an expired desktop pipe, the optional top-level `pipe` setting can supply the current `CODEX_APP_TOOLS_PIPE_PATH` from a desktop-launched task. It is reloaded with the sources and takes precedence over the inherited hint. Windows still verifies the pipe owner against the installed desktop main executable. Ambiguous discovery prevents writes; the adapter does not choose an arbitrary pipe.
+
+The source list is reloaded on every pass. Adding or removing a source does not require restarting either Pi session. Without `sources`, the legacy `hostId` and daemon endpoint remain the sole source. Duplicate host IDs or malformed source settings abort before writes. An unavailable source is reported through `failedHosts` and does not prevent successful source snapshots from being reconciled. An uncertain native write stops the pass; the next pass reads desktop inventory before another mutation. Removed or unavailable sources do not trigger automatic withdrawal of saved desktop references. Use offline recovery for that operation.
+
 The adapter reconciles every five seconds after the preceding pass completes. It selects active members of the server's Pi section, skips project-assigned sessions, preserves placements in other custom sections and Pinned, and inserts missing chats before the first chat owned by the same backend. Projects keep their slots. When desktop chat sorting is `updated_at`, it also orders the destination's recent chats across hosts by activity. The native inventory contains at most 50 recent chats; older entries retain their relative order. Manual sorting is preserved, and unavailable hosts suspend ordering. Each successful move or reorder requires subsequent desktop confirmation. A failed or timed-out write is not blindly replayed; the next pass reads inventory first.
 
 On Windows, endpoint discovery verifies the named pipe's owning process against the installed OpenAI.Codex main executable. A valid supplied endpoint wins. After it disappears, discovery requires exactly one verified candidate; ambiguity prevents writes. The tool catalog is checked again after reconnection. Other platforms require an explicit endpoint. The native transport is a private, version-sensitive desktop interface, so desktop updates require compatibility verification. Backend availability and visible running/completed behavior remain separate checks.

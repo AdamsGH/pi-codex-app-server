@@ -10,10 +10,13 @@ import { resolveDesktopEndpoint } from "./desktop/desktop-endpoint.js";
 import { DesktopNativeTools } from "./desktop/native-tools.js";
 import {
   desktopInventorySchema,
-  reconcileDesktopSidebar,
   reconcileDesktopSectionOrder,
 } from "./desktop/sidebar-reconciler.js";
-import { readSidebarSnapshot } from "./sidebar/sidebar-source.js";
+import {
+  readDesktopSyncSettings,
+  readDesktopSyncSnapshot,
+  reconcileDesktopSources,
+} from "./desktop/sync-sources.js";
 
 interface SidebarMoveArguments {
   hostId: string;
@@ -52,6 +55,11 @@ const options = new Command()
     path.join(serverHome, "endpoint.json")
   )
   .option("--once", "Reconcile once and exit", false)
+  .option(
+    "--sources <path>",
+    "Reloadable desktop-sync.json with source hosts",
+    path.join(serverHome, "desktop-sync.json")
+  )
   .parse()
   .opts<{
     hostId: string;
@@ -60,6 +68,7 @@ const options = new Command()
     pipe?: string;
     endpoint: string;
     once: boolean;
+    sources: string;
   }>();
 
 if (!options.callerThreadId) {
@@ -86,9 +95,16 @@ let lastError: string | undefined;
 try {
   do {
     try {
+      // oxlint-disable-next-line no-await-in-loop
+      const settings = await readDesktopSyncSettings(options.sources, {
+        endpoint: options.endpoint,
+        hostId: options.hostId,
+      });
       // Resolve again after failures because desktop owns the pipe lifetime.
       // oxlint-disable-next-line no-await-in-loop
-      const current = await resolveDesktopEndpoint(endpoint ?? options.pipe);
+      const current = await resolveDesktopEndpoint(
+        settings.pipe ?? endpoint ?? options.pipe
+      );
       if (current !== endpoint || !client) {
         client?.close();
         client = new DesktopNativeTools(current, { timeoutMs: 45_000 });
@@ -111,15 +127,10 @@ try {
       }
       const desktop = client;
       // oxlint-disable-next-line no-await-in-loop
-      const snapshot = await readSidebarSnapshot(options.endpoint, {
-        sectionOnly: true,
-      });
-      // oxlint-disable-next-line no-await-in-loop
-      const moved = await reconcileDesktopSidebar({
-        hostId: options.hostId,
-        move: async (threadId, beforeThreadId) => {
+      const { moved, failedHosts } = await reconcileDesktopSources({
+        move: async (hostId, threadId, beforeThreadId) => {
           const args: SidebarMoveArguments = {
-            hostId: options.hostId,
+            hostId,
             sectionId: options.sectionId,
             threadId,
           };
@@ -136,8 +147,9 @@ try {
           desktopInventorySchema.parse(
             await desktop.call("list_threads", { limit: 50 }, caller)
           ),
+        readSnapshot: readDesktopSyncSnapshot,
         sectionId: options.sectionId,
-        snapshot,
+        sources: settings.sources,
       });
       // oxlint-disable-next-line no-await-in-loop
       const reordered = await reconcileDesktopSectionOrder({
@@ -154,12 +166,21 @@ try {
         },
         sectionId: options.sectionId,
       });
-      if (moved.length || reordered || options.once || lastError) {
+      if (
+        moved.length ||
+        reordered ||
+        options.once ||
+        lastError ||
+        failedHosts.length
+      ) {
         process.stdout.write(
-          `${JSON.stringify({ status: "connected", synchronized: moved })}\n`
+          `${JSON.stringify({ failedHosts, status: failedHosts.length ? "degraded" : "connected", synchronized: moved })}\n`
         );
       }
       lastError = undefined;
+      if (options.once && failedHosts.length) {
+        process.exitCode = 1;
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       client?.close();

@@ -99,6 +99,11 @@ export const runSidebarSync = async (
     .option("--output <file>", "Snapshot to create")
     .option("--stdout", "Write only snapshot JSON to stdout", false)
     .option(
+      "--section-only",
+      "Export only unarchived members of the Pi server section",
+      false
+    )
+    .option(
       "--skip-empty-projects",
       "Export only projects referenced by published sessions",
       false
@@ -111,12 +116,15 @@ export const runSidebarSync = async (
         overwrite: boolean;
         stdout: boolean;
         skipEmptyProjects: boolean;
+        sectionOnly: boolean;
       }) => {
         if (options.stdout === Boolean(options.output)) {
           throw new Error("Specify exactly one of --output or --stdout");
         }
         const snapshot = filterSidebarProjects(
-          await readSidebarSnapshot(options.endpoint),
+          await readSidebarSnapshot(options.endpoint, {
+            sectionOnly: options.sectionOnly,
+          }),
           options.skipEmptyProjects
         );
         if (options.stdout) {

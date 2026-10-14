@@ -61,6 +61,8 @@ export const readWslSidebarSnapshot = async (
     distribution: string;
     repository: string;
     skipEmptyProjects: boolean;
+    sectionOnly?: boolean;
+    timeoutMs?: number;
   },
   run: WslExecutor = execute
 ): Promise<SidebarSnapshot> => {
@@ -80,10 +82,13 @@ export const readWslSidebarSnapshot = async (
     "export",
     "--stdout",
   ];
+  if (options.sectionOnly) {
+    args.push("--section-only");
+  }
   const { stdout } = await run("wsl.exe", args, {
     encoding: "utf-8",
     maxBuffer: 16 * 1024 * 1024,
-    timeout: 120_000,
+    timeout: options.timeoutMs ?? 120_000,
     windowsHide: true,
   });
   // The remote CLI must return a complete snapshot. Failed or partial exports never replace the saved candidate.

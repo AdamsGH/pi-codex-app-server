@@ -51,6 +51,8 @@ export const startManagedDesktopSync = async (
     settings.callerThreadId,
     "--endpoint",
     config.paths.endpoint,
+    "--sources",
+    path.join(config.paths.home, "desktop-sync.json"),
   ];
   let closed = false;
   let child: ChildProcess | undefined;
