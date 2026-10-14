@@ -13,7 +13,7 @@ Configure the extension in Pi's global `~/.pi/agent/settings.json` or project `<
 }
 ```
 
-`unassigned` controls sessions without an assigned Pi project. `projects` controls sessions assigned to a project, including manual assignments. Both default to `mode: "all"` and `maxAgeDays: null`; omitting the settings preserves unrestricted publication.
+`unassigned` controls sessions without an assigned Pi project. `projects` controls sessions assigned to a project, including manual assignments. Both default to `mode: "active"` and `maxAgeDays: null`. Connecting a new host does not publish its historical sessions unless `mode: "all"` is explicitly configured. The example above opts into history publication.
 
 | Setting | Behavior |
 | --- | --- |
@@ -53,4 +53,4 @@ Policy files are read on catalog requests and during the connected-client refres
 
 The server emits `thread/deleted` when a session leaves its published catalog and `thread/started` when it reappears. These notifications withdraw or restore the Codex representation. They do not delete Pi history, session files, or metadata, and do not change Pi archive flags. Projects remain registered when all their sessions are hidden.
 
-The sidebar exporter reads the filtered catalog. Import removes saved references for sessions owned by the selected host but absent from the full snapshot, including pinned entries and project assignments. Sessions belonging to other hosts are preserved. Always use a fresh snapshot after changing publication settings. `just sidebar-preview` reports `withdrawnThreads`; `just sidebar-apply` reconciles persisted desktop state while Codex is closed. Connected desktop clients can remove withdrawn sessions through notifications without an offline import.
+The sidebar exporter reads the filtered catalog. Import removes saved references for sessions owned by the selected host but absent from the full snapshot, including pinned entries and project assignments. Sessions belonging to other hosts are preserved. Always use a fresh snapshot after changing publication settings. `just sidebar-preview` reports `withdrawnThreads`; `just sidebar-apply` reconciles persisted desktop state while Codex is closed. Desktop can retain saved custom-section references after receiving withdrawal notifications. If those references remain, use the offline import; the live adapter does not remove them or delete Pi history.

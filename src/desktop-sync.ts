@@ -11,6 +11,7 @@ import { DesktopNativeTools } from "./desktop/native-tools.js";
 import {
   desktopInventorySchema,
   reconcileDesktopSidebar,
+  reconcileDesktopSectionOrder,
 } from "./desktop/sidebar-reconciler.js";
 import { readSidebarSnapshot } from "./sidebar/sidebar-source.js";
 
@@ -94,7 +95,11 @@ try {
         endpoint = current;
         // oxlint-disable-next-line no-await-in-loop
         const tools = await client.listTools();
-        for (const name of ["list_threads", "move_thread_to_sidebar_section"]) {
+        for (const name of [
+          "list_threads",
+          "move_thread_to_sidebar_section",
+          "reorder_section",
+        ]) {
           if (
             !tools.some(
               (tool) => tool.name === name && tool.namespace === "codex_app"
@@ -134,7 +139,22 @@ try {
         sectionId: options.sectionId,
         snapshot,
       });
-      if (moved.length || options.once || lastError) {
+      // oxlint-disable-next-line no-await-in-loop
+      const reordered = await reconcileDesktopSectionOrder({
+        readInventory: async () =>
+          desktopInventorySchema.parse(
+            await desktop.call("list_threads", { limit: 50 }, caller)
+          ),
+        reorder: async (threadIds) => {
+          await desktop.call(
+            "reorder_section",
+            { sectionId: options.sectionId, threadIds },
+            caller
+          );
+        },
+        sectionId: options.sectionId,
+      });
+      if (moved.length || reordered || options.once || lastError) {
         process.stdout.write(
           `${JSON.stringify({ status: "connected", synchronized: moved })}\n`
         );

@@ -194,7 +194,10 @@ export class PiThreadCatalog {
     }
     const { info: session, manager: sessionManager } = loaded;
     const published = this.publication
-      ? await this.publication.select([session])
+      ? await this.publication.select(
+          [session],
+          includeTurns ? session.id : undefined
+        )
       : [session];
     if (published.length === 0) {
       return undefined;

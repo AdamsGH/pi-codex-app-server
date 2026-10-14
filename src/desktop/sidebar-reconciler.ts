@@ -4,7 +4,13 @@ import type { SidebarSnapshot } from "../sidebar/sidebar-state.js";
 
 export const desktopInventorySchema = z.object({
   pinnedThreads: z
-    .array(z.object({ hostId: z.string().optional(), id: z.string() }))
+    .array(
+      z.object({
+        hostId: z.string().optional(),
+        id: z.string(),
+        updatedAt: z.number().finite().optional(),
+      })
+    )
     .optional(),
   sections: z.array(
     z.object({
@@ -13,8 +19,21 @@ export const desktopInventorySchema = z.object({
       sectionId: z.string(),
     })
   ),
+  sidebarPreferences: z
+    .object({
+      sorting: z
+        .object({ chats: z.enum(["manual", "updated_at"]).optional() })
+        .optional(),
+    })
+    .optional(),
   threads: z
-    .array(z.object({ hostId: z.string().optional(), id: z.string() }))
+    .array(
+      z.object({
+        hostId: z.string().optional(),
+        id: z.string(),
+        updatedAt: z.number().finite().optional(),
+      })
+    )
     .optional(),
   unavailableHosts: z.array(z.unknown()).optional(),
 });
@@ -22,6 +41,76 @@ export type DesktopInventory = z.infer<typeof desktopInventorySchema>;
 
 const includesThread = (keys: readonly string[], id: string): boolean =>
   keys.some((key) => key.startsWith("codex:thread:") && key.endsWith(`:${id}`));
+
+const sectionThreadIds = (keys: readonly string[]): string[] =>
+  keys.flatMap((key) => {
+    if (
+      key.startsWith("codex:thread:") ||
+      key.startsWith("chatgpt:conversation:")
+    ) {
+      return [key.slice(key.lastIndexOf(":") + 1)];
+    }
+    return [];
+  });
+
+export const reconcileDesktopSectionOrder = async (options: {
+  readonly sectionId: string;
+  readonly readInventory: () => Promise<DesktopInventory>;
+  readonly reorder: (threadIds: string[]) => Promise<void>;
+}): Promise<boolean> => {
+  const inventory = await options.readInventory();
+  if (
+    inventory.sidebarPreferences?.sorting?.chats !== "updated_at" ||
+    inventory.unavailableHosts?.length
+  ) {
+    return false;
+  }
+  const section = inventory.sections.find(
+    (entry) => entry.sectionId === options.sectionId
+  );
+  if (!section) {
+    throw new Error("Configured desktop section is unavailable");
+  }
+  const current = sectionThreadIds(section.itemKeys);
+  if (new Set(current).size !== current.length) {
+    throw new Error("Desktop section contains ambiguous thread identities");
+  }
+  // list_threads returns a bounded recent window across hosts. Older, unseen entries retain their relative order.
+  const activity = new Map(
+    (inventory.threads ?? []).flatMap((thread) =>
+      thread.updatedAt === undefined
+        ? []
+        : [[thread.id, thread.updatedAt] as const]
+    )
+  );
+  const ordered = current.toSorted((left, right) => {
+    const a = activity.get(left);
+    const b = activity.get(right);
+    if (a === undefined) {
+      return b === undefined ? 0 : 1;
+    }
+    if (b === undefined) {
+      return -1;
+    }
+    return b - a;
+  });
+  if (ordered.every((id, index) => current[index] === id)) {
+    return false;
+  }
+  await options.reorder(ordered);
+  const after = await options.readInventory();
+  const verified = after.sections.find(
+    (entry) => entry.sectionId === options.sectionId
+  );
+  const actual = sectionThreadIds(verified?.itemKeys ?? []);
+  if (
+    actual.length !== ordered.length ||
+    actual.some((id, index) => ordered[index] !== id)
+  ) {
+    throw new Error("Desktop did not confirm section order");
+  }
+  return true;
+};
 
 export const reconcileDesktopSidebar = async (options: {
   readonly hostId: string;

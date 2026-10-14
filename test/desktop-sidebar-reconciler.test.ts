@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   desktopInventorySchema,
   reconcileDesktopSidebar,
+  reconcileDesktopSectionOrder,
 } from "../src/desktop/sidebar-reconciler.js";
 import type { DesktopInventory } from "../src/desktop/sidebar-reconciler.js";
 import type { SidebarSnapshot } from "../src/sidebar/sidebar-state.js";
@@ -32,6 +33,95 @@ const inventory = (): DesktopInventory => ({
 });
 
 describe("desktop sidebar reconciliation", () => {
+  it("orders recent chats across hosts while retaining older entries and project slots", async () => {
+    const state = inventory();
+    state.sidebarPreferences = { sorting: { chats: "updated_at" } };
+    state.sections[0]?.itemKeys.splice(
+      0,
+      state.sections[0].itemKeys.length,
+      "codex:project:repo",
+      key("unknown-a"),
+      key("old"),
+      key("wsl"),
+      key("unknown-b")
+    );
+    state.threads = [
+      { hostId: "windows", id: "old", updatedAt: 1 },
+      { hostId: "wsl", id: "wsl", updatedAt: 2 },
+    ];
+    const reorder = vi.fn<(ids: string[]) => Promise<void>>((ids) => {
+      state.sections[0]?.itemKeys.splice(
+        0,
+        state.sections[0].itemKeys.length,
+        "codex:project:repo",
+        ...ids.map(key)
+      );
+      return Promise.resolve();
+    });
+    const options = {
+      readInventory: () => Promise.resolve(state),
+      reorder,
+      sectionId: "pi",
+    };
+    await expect(reconcileDesktopSectionOrder(options)).resolves.toBeTruthy();
+    expect(reorder).toHaveBeenCalledExactlyOnceWith([
+      "wsl",
+      "old",
+      "unknown-a",
+      "unknown-b",
+    ]);
+    await expect(reconcileDesktopSectionOrder(options)).resolves.toBeFalsy();
+    expect(reorder).toHaveBeenCalledOnce();
+  });
+
+  it("preserves manual sorting", async () => {
+    const state = inventory();
+    state.sidebarPreferences = { sorting: { chats: "manual" } };
+    const reorder = vi
+      .fn<(ids: string[]) => Promise<void>>()
+      .mockResolvedValue();
+    await expect(
+      reconcileDesktopSectionOrder({
+        readInventory: () => Promise.resolve(state),
+        reorder,
+        sectionId: "pi",
+      })
+    ).resolves.toBeFalsy();
+    expect(reorder).not.toHaveBeenCalled();
+  });
+
+  it("reconciles an uncertain reorder without replay and verifies confirmed writes", async () => {
+    const state = inventory();
+    state.sidebarPreferences = { sorting: { chats: "updated_at" } };
+    state.sections[0]?.itemKeys.push(key("new"));
+    state.threads = [
+      { id: "new", updatedAt: 2 },
+      { id: "old", updatedAt: 1 },
+    ];
+    const reorder = vi.fn<(ids: string[]) => Promise<void>>((ids) => {
+      state.sections[0]?.itemKeys.splice(
+        0,
+        state.sections[0].itemKeys.length,
+        ...ids.map(key)
+      );
+      return Promise.reject(new Error("Write deadline expired"));
+    });
+    const options = {
+      readInventory: () => Promise.resolve(state),
+      reorder,
+      sectionId: "pi",
+    };
+    await expect(reconcileDesktopSectionOrder(options)).rejects.toThrow(
+      "deadline"
+    );
+    await expect(reconcileDesktopSectionOrder(options)).resolves.toBeFalsy();
+    expect(reorder).toHaveBeenCalledOnce();
+    state.sections[0]?.itemKeys.reverse();
+    await expect(
+      reconcileDesktopSectionOrder({ ...options, reorder: async () => {} })
+    ).rejects.toThrow("did not confirm section order");
+  });
+
   it("accepts cloud chats that do not have an execution host", () => {
     expect(
       desktopInventorySchema.parse({

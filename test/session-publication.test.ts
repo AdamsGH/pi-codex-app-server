@@ -77,8 +77,26 @@ const fixture = async () => {
 };
 
 describe("Session publication", () => {
+  test("explicit history access bypasses inactivity but cannot bypass off", async () => {
+    const f = await fixture();
+    try {
+      const session = f.session("hidden", 1000);
+      await expect(f.publication.select([session])).resolves.toStrictEqual([]);
+      await expect(
+        f.publication.select([session], session.id)
+      ).resolves.toStrictEqual([session]);
+      await f.settings({ unassigned: { mode: "off" } });
+      await expect(
+        f.publication.select([session], session.id)
+      ).resolves.toStrictEqual([]);
+    } finally {
+      await f.close();
+    }
+  });
+
   test("publishes persisted catalog entries on reconnect and republishes changed recency without duplicates", async () => {
     const f = await fixture();
+    await f.settings({ unassigned: { mode: "all" } });
     let session = f.session("known-thread", 1);
     const list = vi
       .spyOn(PiSessionRepository.prototype, "list")
@@ -195,7 +213,7 @@ describe("Session publication", () => {
     }
   });
 
-  test("RPC reads retain an active session until unsubscribe, then remove it from the published catalog", async () => {
+  test("explicit RPC history reads activate a hidden session until unsubscribe", async () => {
     const f = await fixture();
     const presence = new PiSessionPresence(f.home);
     const responses: CodexWireMessage[] = [];
@@ -237,7 +255,6 @@ describe("Session publication", () => {
         updatedAt: 0,
       });
       await f.settings({ unassigned: { mode: "active" } });
-      await presence.start("rpc-thread");
       const trigger = new JsonRpcConnection({
         clientId: "refresh",
         logger: appServerLogger,
@@ -325,14 +342,22 @@ describe("Session publication", () => {
     }
   });
 
-  test("missing policies preserve all historical sessions", async () => {
+  test("missing policies publish only active sessions and all-history publication requires opt-in", async () => {
     const f = await fixture();
+    const presence = new PiSessionPresence(f.home);
     try {
       const sessions = [f.session("old", 1000), f.session("new")];
+      await expect(f.publication.select(sessions)).resolves.toStrictEqual([]);
+      await presence.start("new");
+      await expect(f.publication.select(sessions)).resolves.toStrictEqual([
+        sessions[1],
+      ]);
+      await f.settings({ unassigned: { mode: "all" } });
       await expect(f.publication.select(sessions)).resolves.toStrictEqual(
         sessions
       );
     } finally {
+      await presence.stop();
       await f.close();
     }
   });
@@ -357,7 +382,10 @@ describe("Session publication", () => {
         f.session("new", 29),
         f.session("old-project", 1000),
       ];
-      await f.settings({ unassigned: { maxAgeDays: 30 } });
+      await f.settings({
+        projects: { mode: "all" },
+        unassigned: { maxAgeDays: 30, mode: "all" },
+      });
       const globalSelection = await f.publication.select(sessions);
       expect(globalSelection.map(({ id }) => id)).toStrictEqual([
         "new",

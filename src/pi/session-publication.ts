@@ -92,13 +92,14 @@ export class PiSessionPublication {
     const scope = new PiProjectCatalog(this.#database).discover(cwd)
       ? "projects"
       : "unassigned";
-    if ((local[scope]?.mode ?? global[scope]?.mode ?? "all") === "off") {
+    if ((local[scope]?.mode ?? global[scope]?.mode ?? "active") === "off") {
       throw new Error(`Pi session publication is disabled for ${cwd}`);
     }
   }
 
   async select(
-    sessions: readonly SessionInfo[]
+    sessions: readonly SessionInfo[],
+    requestedId?: string
   ): Promise<readonly SessionInfo[]> {
     const global = await readPolicies(
       path.join(this.#agentDir, "settings.json")
@@ -120,7 +121,7 @@ export class PiSessionPublication {
         : "unassigned";
       const policy = {
         maxAgeDays: null,
-        mode: "all",
+        mode: "active",
         ...global[scope],
         ...local.get(session.cwd)?.[scope],
       };
@@ -128,6 +129,7 @@ export class PiSessionPublication {
         return false;
       }
       const active =
+        requestedId === session.id ||
         presence.has(session.id) ||
         this.#working(session.id) ||
         [...this.#subscriptions.values()].some((ids) => ids.has(session.id));
