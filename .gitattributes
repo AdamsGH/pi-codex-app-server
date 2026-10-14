@@ -1,3 +1,6 @@
+* text=auto eol=lf
+*.gif binary
+
 drizzle/**/snapshot.json linguist-generated=true
 vendor/** linguist-generated=true
 src/protocol/generated/** linguist-generated=true
