@@ -134,7 +134,28 @@ describe("model/list", () => {
     );
   });
 
-  it("includes the provider in every model display name", async () => {
+  it("keeps provider labels for other providers and omits the Codex prefix", async () => {
+    const original = ModelRuntime.prototype.getAvailableSnapshot;
+    const snapshot = vi
+      .spyOn(ModelRuntime.prototype, "getAvailableSnapshot")
+      .mockImplementation(function available(this: ModelRuntime) {
+        const models = [...original.call(this)];
+        const base = models.find(
+          (model) => model.provider === CONFIGURED_PROVIDER
+        );
+        if (!base) {
+          throw new Error("Missing synthetic configured model");
+        }
+        return [
+          ...models,
+          {
+            ...base,
+            id: "codex-display-test",
+            name: "GPT Display Test",
+            provider: "openai-codex",
+          },
+        ];
+      });
     const appServer = await createAppServer(await createTestConfig());
     let models: readonly {
       readonly displayName: string;
@@ -144,11 +165,18 @@ describe("model/list", () => {
       models = await requestModels(appServer, "model-display-name-test");
     } finally {
       appServer.close();
+      snapshot.mockRestore();
     }
     expect(models).toContainEqual(
       expect.objectContaining({
         displayName: "[Configured Test Provider] configured-model",
         id: `${CONFIGURED_PROVIDER}/configured-model`,
+      })
+    );
+    expect(models).toContainEqual(
+      expect.objectContaining({
+        displayName: "GPT Display Test",
+        id: "openai-codex/codex-display-test",
       })
     );
   });

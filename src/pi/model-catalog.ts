@@ -7,6 +7,7 @@ import type { ModelListParams } from "../../vendor/openai-codex-app-server-proto
 import type { ModelListResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ModelListResponse.js";
 import type { ReasoningEffortOption } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ReasoningEffortOption.js";
 import type { PiModelRuntime } from "./pi-model-runtime.js";
+import { OPENAI_CODEX_PROVIDER } from "./pi-model-runtime.js";
 
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 500;
@@ -81,7 +82,10 @@ const toCodexModel = (
     defaultReasoningEffort: defaultReasoningEffort(efforts),
     defaultServiceTier: null,
     description: `${model.provider} · ${model.api} · ${model.contextWindow.toLocaleString()} token context`,
-    displayName: `[${providerDisplayName}] ${model.name}`,
+    displayName:
+      model.provider === OPENAI_CODEX_PROVIDER
+        ? model.name
+        : `[${providerDisplayName}] ${model.name}`,
     hidden: false,
     id: key,
     inputModalities: model.input,
