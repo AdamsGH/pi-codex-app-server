@@ -120,6 +120,7 @@
   },
   "packageManager": "bun@1.4.3",
   "pi": {
+    "image": "https://raw.githubusercontent.com/AdamsGH/pi-codex-app-server/cbca0f02419e31b9c64a8e59334efb711b9141a8/docs/assets/pi-codex-session.gif",
     "extensions": [
       "./src/extension/index.ts"
     ]
