@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { DesktopNativeTools } from "./native-tools.js";
+
 const execute = promisify(execFile);
 const PIPE_PREFIX = "\\\\.\\pipe\\codex-browser-use-";
 const DISCOVERY_TIMEOUT_MS = 15_000;
@@ -41,11 +43,8 @@ function Test-DesktopPipe([string] $pipePath) {
   }
 }
 $preferred = $env:PI_CODEX_DESKTOP_PREFERRED_ENDPOINT
-if ($preferred -and (Test-DesktopPipe $preferred)) {
-  ConvertTo-Json -InputObject @($preferred) -Compress
-  exit 0
-}
 $matches = @()
+if ($preferred -and (Test-DesktopPipe $preferred)) { $matches += $preferred }
 foreach ($pipe in @(Get-ChildItem -LiteralPath '\\.\pipe\' | Where-Object Name -Like 'codex-browser-use-*')) {
   $pipePath = '\\.\pipe\' + $pipe.Name
   if (Test-DesktopPipe $pipePath) { $matches += $pipePath }
@@ -80,11 +79,50 @@ const discoverWindowsEndpoints = async (
 export interface DesktopEndpointDiscovery {
   platform: string;
   discover: (preferred: string | undefined) => Promise<string>;
+  supportsAppTools: (endpoint: string) => Promise<boolean>;
 }
+
+const supportsAppTools = async (endpoint: string): Promise<boolean> => {
+  const tools = new DesktopNativeTools(endpoint, { timeoutMs: 1000 });
+  try {
+    const catalog = await tools.listTools();
+    return catalog.some(
+      (tool) => tool.namespace === "codex_app" && tool.name === "list_threads"
+    );
+  } catch {
+    return false;
+  } finally {
+    tools.close();
+  }
+};
 
 const runtimeDiscovery: DesktopEndpointDiscovery = {
   discover: discoverWindowsEndpoints,
   platform: process.platform,
+  supportsAppTools,
+};
+
+const appToolEndpoints = async (
+  candidates: readonly string[],
+  discovery: DesktopEndpointDiscovery
+): Promise<string[]> => {
+  const result: string[] = [];
+  const deadline = Date.now() + DISCOVERY_TIMEOUT_MS;
+  for (let offset = 0; offset < candidates.length; offset += 8) {
+    if (Date.now() >= deadline) {
+      throw new Error("Codex desktop capability discovery timed out");
+    }
+    // eslint-disable-next-line no-await-in-loop -- Bound simultaneous pipe connections and the complete read-only preflight.
+    const batch = await Promise.all(
+      candidates
+        .slice(offset, offset + 8)
+        .map(async (endpoint) =>
+          (await discovery.supportsAppTools(endpoint)) ? endpoint : null
+        )
+    );
+    result.push(...batch.filter((endpoint) => endpoint !== null));
+  }
+  return result;
 };
 
 export const resolveDesktopEndpoint = async (
@@ -120,6 +158,7 @@ export const resolveDesktopEndpoint = async (
   }
   if (
     !Array.isArray(endpoints) ||
+    endpoints.length > 2048 ||
     !endpoints.every(
       (endpoint): endpoint is string =>
         typeof endpoint === "string" && endpoint.startsWith(PIPE_PREFIX)
@@ -127,7 +166,18 @@ export const resolveDesktopEndpoint = async (
   ) {
     throw new Error("Invalid Codex desktop endpoint discovery result");
   }
-  const unique = [...new Set<string>(endpoints)];
+  const candidates = [...new Set<string>(endpoints)];
+  if (
+    preferred &&
+    candidates.includes(preferred) &&
+    (await discovery.supportsAppTools(preferred))
+  ) {
+    return preferred;
+  }
+  const unique = await appToolEndpoints(
+    candidates.filter((candidate) => candidate !== preferred),
+    discovery
+  );
   const [endpoint] = unique;
   if (unique.length !== 1 || endpoint === undefined) {
     throw new Error(

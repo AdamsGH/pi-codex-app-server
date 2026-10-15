@@ -55,4 +55,6 @@ Receipts cannot reconstruct IDs missing from older history. Queued steering inpu
 
 ## Native endpoint discovery
 
-Windows discovery inventories installed desktop main processes once per invocation and checks named-pipe owner IDs against that inventory. The previous per-pipe CIM process query exceeded the discovery deadline when this installation exposed dozens of app-tools pipes. Live discovery with 85 verified endpoints completed in about one second after the change. Selection still requires a verified preferred endpoint when the inventory is ambiguous. It does not choose an arbitrary pipe for desktop mutations.
+Windows discovery inventories installed desktop main processes once per invocation and checks named-pipe owner IDs against that inventory. The previous per-pipe CIM process query exceeded the discovery deadline when this installation exposed dozens of pipes. One live inventory contained 85 Desktop-owned endpoints, most of which were browser transports that rejected `tools/list`.
+
+Discovery now performs a bounded read-only capability preflight and retains only endpoints exposing `codex_app/list_threads`. A valid explicit preference wins; a dead or browser-only preference can be replaced by a unique verified app-tools endpoint. Multiple genuine app-tools endpoints still require an explicit preference. The live installation resolved its unique native endpoint after a normal Desktop restart without selecting a browser transport or editing Desktop state.

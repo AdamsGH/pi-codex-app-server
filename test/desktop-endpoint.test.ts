@@ -8,16 +8,50 @@ const unavailableDiscovery = (): Promise<string> =>
 const inventory = (endpoints: string[]) => ({
   discover: () => Promise.resolve(JSON.stringify(endpoints)),
   platform: "win32",
+  supportsAppTools: () => Promise.resolve(true),
 });
 
 describe("desktop endpoint discovery", () => {
+  it("filters browser-only pipes owned by the same Desktop process", async () => {
+    const browser = `${endpoint}-browser`;
+    await expect(
+      resolveDesktopEndpoint(browser, {
+        ...inventory([browser, endpoint]),
+        supportsAppTools: (candidate) =>
+          Promise.resolve(candidate === endpoint),
+      })
+    ).resolves.toBe(endpoint);
+  });
+
+  it("honors a verified app-tools preference when multiple native endpoints exist", async () => {
+    await expect(
+      resolveDesktopEndpoint(
+        endpoint,
+        inventory([endpoint, `${endpoint}-other`])
+      )
+    ).resolves.toBe(endpoint);
+  });
+
+  it("rejects inventories containing only browser transports", async () => {
+    await expect(
+      resolveDesktopEndpoint(undefined, {
+        ...inventory([endpoint]),
+        supportsAppTools: () => Promise.resolve(false),
+      })
+    ).rejects.toThrow("No verified Codex");
+  });
+
   it("passes the preferred pipe to verified discovery", async () => {
     const discover = (preferred: string | undefined): Promise<string> => {
       expect(preferred).toBe(endpoint);
       return Promise.resolve(JSON.stringify([endpoint]));
     };
     await expect(
-      resolveDesktopEndpoint(endpoint, { discover, platform: "win32" })
+      resolveDesktopEndpoint(endpoint, {
+        discover,
+        platform: "win32",
+        supportsAppTools: () => Promise.resolve(true),
+      })
     ).resolves.toBe(endpoint);
   });
 
@@ -54,6 +88,7 @@ describe("desktop endpoint discovery", () => {
       resolveDesktopEndpoint(undefined, {
         discover: unavailableDiscovery,
         platform: "win32",
+        supportsAppTools: () => Promise.resolve(true),
       })
     ).rejects.toThrow("Could not verify");
   });
