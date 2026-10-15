@@ -23,16 +23,19 @@ foreach ($package in @(Get-AppxPackage -Name OpenAI.Codex)) {
     $desktopExecutables += Join-Path $package.InstallLocation ('app\' + $name)
   }
 }
+$desktopProcessIds = [System.Collections.Generic.HashSet[uint32]]::new()
+foreach ($process in @(Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe' OR Name='Codex.exe'")) {
+  if ($desktopExecutables -contains $process.ExecutablePath -and $process.CommandLine -notmatch '(?:^|\s)--type(?:=|\s)') {
+    [void]$desktopProcessIds.Add([uint32]$process.ProcessId)
+  }
+}
 function Test-DesktopPipe([string] $pipePath) {
   $handle = [PiCodexDesktopPipe]::CreateFile($pipePath, 0, 3, [IntPtr]::Zero, 3, 0, [IntPtr]::Zero)
   if ($handle -eq [IntPtr](-1)) { return $false }
   try {
     $ownerId = [uint32]0
     if (-not [PiCodexDesktopPipe]::GetNamedPipeServerProcessId($handle, [ref]$ownerId)) { return $false }
-    $owner = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $ownerId) -ErrorAction SilentlyContinue
-    if ($null -eq $owner -or [string]::IsNullOrWhiteSpace($owner.CommandLine)) { return $false }
-    if ($owner.CommandLine -match '(?:^|\s)--type(?:=|\s)') { return $false }
-    return $desktopExecutables -contains $owner.ExecutablePath
+    return $desktopProcessIds.Contains($ownerId)
   } finally {
     [void][PiCodexDesktopPipe]::CloseHandle($handle)
   }

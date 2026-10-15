@@ -12,6 +12,8 @@ On Windows, append `| Set-Clipboard`. If DevTools are available in the affected 
 
 The production desktop used in acceptance does not expose DevTools through Ctrl+Shift+I or its View menu. Its window configuration gates DevTools behind `allowDevtools`. The probe has passed synthetic serialization and redaction tests but has not been validated in a live desktop window. It cannot currently collect a snapshot from that production installation. Do not restart the application or patch its binaries to enable it during a stalled submission; doing so loses the state being investigated. Use existing desktop logs and read-only server metadata instead.
 
+An explicitly authorized restart from an independent CLI tested both loopback `--remote-debugging-port` and `--inspect` arguments. Neither exposed a listener in Windows desktop 26.1007.9446.0. Its runtime is Chromium/Owl with an Electron-compatible application interface. Application logs confirmed the production build disables DevTools. No application binaries, runtime policy, or saved state were patched; the application was subsequently launched normally. These flags are not a working diagnostic path for this installation.
+
 The implementation was derived from the installed Codex desktop 26.1007.9446.0 source, specifically `app-shared-30671c57ec82.js` and `app-initial-102e45562729.js`. It uses the `v$t` manager registry atom and its `forHost`, `getConversation`, and `getStreamRole` read interfaces. React fibers are used only to locate the existing store.
 
 The probe refuses other bundle hashes. After a desktop update, inspect the installed source again, verify these read interfaces and the registry export, update the bundle guard, and run the serialization and redaction test. Do not remove the guard to force compatibility. This probe does not patch the desktop installation.
@@ -50,3 +52,7 @@ Live inspection subsequently found the same client message ID in two completed t
 Both the daemon and TUI owner now reconcile `clientUserMessageId` against the selected branch's validated receipts and live accepted input before starting or steering a run. A recognized ID returns its accepted turn without invoking Pi again or broadcasting another execution. Client message IDs identify immutable submissions within a thread. Reusing an accepted ID does not submit new input. Requests without an ID retain their existing behavior.
 
 Receipts cannot reconstruct IDs missing from older history. Queued steering input that Pi has not persisted is recognized only while its live acceptance remains available. This is duplicate suppression for known accepted submissions, not a guarantee of exactly-once execution after every crash or persistence failure. Never infer acceptance by comparing message text or automatically replay an uncertain command.
+
+## Native endpoint discovery
+
+Windows discovery inventories installed desktop main processes once per invocation and checks named-pipe owner IDs against that inventory. The previous per-pipe CIM process query exceeded the discovery deadline when this installation exposed dozens of app-tools pipes. Live discovery with 85 verified endpoints completed in about one second after the change. Selection still requires a verified preferred endpoint when the inventory is ambiguous. It does not choose an arbitrary pipe for desktop mutations.
