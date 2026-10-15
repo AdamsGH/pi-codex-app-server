@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AppServerConfig } from "../src/config/app-server-config.js";
 import { appServerLogger } from "../src/logging/app-server-logger.js";
+import { projectPiConversation } from "../src/pi/conversation-projector.js";
 import { PiLiveSessionManager } from "../src/pi/live-session-manager.js";
 import { emptyTurn } from "../src/pi/live-turn.js";
 import { PiModelCatalog } from "../src/pi/model-catalog.js";
@@ -573,6 +574,50 @@ describe("Pi live turn lifecycle", () => {
       f.manager.close();
       await rm(home, { force: true, recursive: true });
     }
+  });
+
+  it("persists accepted identities when the daemon owns execution", async () => {
+    const f = fixture();
+    f.prompt.mockImplementation(async () => {
+      f.sessionManager.appendMessage({
+        content: "synthetic input",
+        role: "user",
+        timestamp: 1,
+      });
+      await f.completion.promise;
+      const event = assistantEnd("stop");
+      if (event.type === "message_end" && event.message.role === "assistant") {
+        f.sessionManager.appendMessage(event.message);
+      }
+    });
+    const turn = await f.manager.startTurn(
+      {
+        clientUserMessageId: "sdk-client",
+        input: [{ text: "synthetic input", text_elements: [], type: "text" }],
+        threadId: "thread",
+      },
+      f.connection
+    );
+    f.completion.resolve();
+    await vi.waitFor(() =>
+      expect(f.notifications.at(-1)).toMatchObject({
+        method: "thread/status/changed",
+        params: { status: { type: "idle" } },
+      })
+    );
+    expect(
+      projectPiConversation(f.sessionManager.getBranch(), "/synthetic")
+    ).toMatchObject([
+      {
+        id: turn.id,
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            clientId: "sdk-client",
+            type: "userMessage",
+          }),
+        ]),
+      },
+    ]);
   });
 
   it("reports prompt rejection as failed with its error", async () => {

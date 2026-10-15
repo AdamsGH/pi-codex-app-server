@@ -29,6 +29,10 @@ check:
 daemon: build
     node dist/cli.js daemon
 
+# Print a read-only DevTools probe for the installed desktop queue.
+desktop-queue-probe host thread:
+    node scripts/desktop-queue-probe.mjs "{{host}}" "{{thread}}"
+
 # Export publication metadata without changing desktop state.
 sidebar-export: build
     node dist/sidebar-sync.js export --output "{{snapshot}}" --skip-empty-projects --overwrite

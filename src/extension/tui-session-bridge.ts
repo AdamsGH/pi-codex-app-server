@@ -21,6 +21,7 @@ import {
 import type { ActiveTurn } from "../pi/live-turn.js";
 import { SessionOwnerHost } from "../pi/session-owner-host.js";
 import type { OwnerRequest, OwnerResult } from "../pi/session-owner.js";
+import { persistTurnReceipt } from "../pi/turn-receipt.js";
 import {
   parseServerNotification,
   parseCodexWireMessage,
@@ -143,6 +144,7 @@ export class TuiSessionBridge {
             )
           ),
       },
+      historyEntryId: context.sessionManager.getBranch().at(-1)?.id ?? null,
       historyTurnCount: projectPiConversation(
         context.sessionManager.getBranch(),
         context.cwd
@@ -210,6 +212,15 @@ export class TuiSessionBridge {
       active.reasoningItems.clear();
     }
     if (event.type === "agent_settled") {
+      if (this.#context) {
+        persistTurnReceipt({
+          append: (type, data) => this.#pi.appendEntry(type, data),
+          entries: this.#context.sessionManager.getBranch(),
+          historyEntryId: active.historyEntryId,
+          threadId: active.threadId,
+          turn: active.turn,
+        });
+      }
       this.#submittedPrompt = undefined;
       clearTimeout(this.#acceptanceTimer);
       active.interrupted ||= "aborted" in event && event.aborted === true;

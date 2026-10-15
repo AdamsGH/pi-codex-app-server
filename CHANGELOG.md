@@ -6,6 +6,7 @@
 - Share native Pi TUI sessions with Codex through a single-writer owner bridge.
 - Recover desktop history, runtime status, and relay sequence state across reconnects.
 - Deliver turn completion before idle status so clients can release their streams safely.
+- Preserve completed-turn and client message identities in Pi history across owner and daemon reconnects.
 - Show Codex model names without the redundant provider prefix.
 - Synchronize newly published chats through native desktop host tools.
 - Add session publication controls and protocol generation with verified artifact digests.

@@ -12,6 +12,7 @@ const toolResultTextSchema = z.union([
   z.json().transform((value) => JSON.stringify(value)),
 ]);
 export interface ActiveTurn {
+  readonly historyEntryId: string | null;
   readonly historyTurnCount: number;
   interrupted: boolean;
   failure?: Error;

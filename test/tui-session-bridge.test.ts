@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 
 import { TuiSessionBridge } from "../src/extension/tui-session-bridge.js";
+import { projectPiConversation } from "../src/pi/conversation-projector.js";
 import { SessionOwnerClient } from "../src/pi/session-owner-client.js";
 import {
   acquireSessionLease,
@@ -46,7 +47,7 @@ const response = (): AssistantMessage => ({
     totalTokens: 2,
   },
 });
-const fixture = async () => {
+const fixture = async (persistent = false) => {
   const home = await mkdtemp(path.join(tmpdir(), "pi-owner-test-"));
   cleanup.push(() => rm(home, { force: true, recursive: true }));
   const modelRuntime = await ModelRuntime.create({
@@ -91,7 +92,9 @@ const fixture = async () => {
     model,
     modelRuntime,
     resourceLoader: loader,
-    sessionManager: SessionManager.inMemory(home),
+    sessionManager: persistent
+      ? SessionManager.create(home, path.join(home, "sessions"))
+      : SessionManager.inMemory(home),
     settingsManager: settings,
     tools: [],
   });
@@ -291,6 +294,63 @@ describe("TUI session bridge", () => {
     }
     expect(f.events[0]).toStrictEqual(f.events[1]);
   });
+
+  it.each([false, true])(
+    "preserves accepted message identities after reopening JSONL without an owner snapshot, aborted=%s",
+    async (aborted) => {
+      const f = await fixture(true);
+      const result = await f.clients[0]?.request({
+        id: 1,
+        method: "turn/start",
+        params: {
+          clientUserMessageId: "accepted-client",
+          input: [{ text: "synthetic input", text_elements: [], type: "text" }],
+          threadId: f.session.sessionId,
+        },
+      });
+      await vi.waitFor(() => expect(f.streams).toHaveLength(1));
+      const [stream] = f.streams;
+      if (!stream) {
+        throw new Error("Missing synthetic stream");
+      }
+      const partial = streamText(stream, "synthetic reply");
+      if (aborted) {
+        await f.session.abort();
+      } else {
+        complete(stream, partial);
+      }
+      await vi.waitFor(() =>
+        expect(f.clients[0]?.snapshot.turn?.status).toBe(
+          aborted ? "interrupted" : "completed"
+        )
+      );
+      const file = f.session.sessionManager.getSessionFile();
+      if (!file) {
+        throw new Error("Missing session file");
+      }
+      const reopened = projectPiConversation(
+        SessionManager.open(file).getBranch(),
+        f.home
+      );
+      const live = f.clients[0]?.snapshot.turn;
+      expect(result).toMatchObject({ id: reopened.at(-1)?.id });
+      expect(reopened.at(-1)).toMatchObject({
+        id: live?.id,
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            clientId: "accepted-client",
+            type: "userMessage",
+          }),
+        ]),
+        rootTurnId: live?.rootTurnId,
+      });
+      expect(
+        reopened.at(-1)?.items.filter((item) => item.type === "userMessage")
+      ).toStrictEqual(
+        live?.items.filter((item) => item.type === "userMessage")
+      );
+    }
+  );
 
   it("rejects a second writer and rejects stale turn steering", async () => {
     const f = await fixture();

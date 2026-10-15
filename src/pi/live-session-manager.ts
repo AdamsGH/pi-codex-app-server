@@ -44,6 +44,7 @@ import { acquireSessionLease } from "./session-owner.js";
 import { readPiPresence } from "./session-presence.js";
 import type { PiSessionRepository } from "./session-repository.js";
 import type { PiThreadCatalog } from "./thread-catalog.js";
+import { persistTurnReceipt } from "./turn-receipt.js";
 
 const dataUrlSchema = z
   .string()
@@ -565,6 +566,8 @@ export class PiLiveSessionManager {
     const active: ActiveTurn = {
       agentItems: new Map(),
       connection: this.#notifier(params.threadId),
+      historyEntryId:
+        loaded.session.sessionManager.getBranch().at(-1)?.id ?? null,
       historyTurnCount: projectPiConversation(
         loaded.session.sessionManager.getBranch(),
         loaded.session.sessionManager.getCwd()
@@ -953,6 +956,15 @@ export class PiLiveSessionManager {
       }
     } finally {
       active.unsubscribe?.();
+      persistTurnReceipt({
+        append: (type, data) => {
+          loaded.session.sessionManager.appendCustomEntry(type, data);
+        },
+        entries: loaded.session.sessionManager.getBranch(),
+        historyEntryId: active.historyEntryId,
+        threadId: active.threadId,
+        turn: active.turn,
+      });
       active.turn.completedAt = Math.floor(Date.now() / 1000);
       active.turn.durationMs = Date.now() - active.startedAtMs;
       loaded.active = undefined;

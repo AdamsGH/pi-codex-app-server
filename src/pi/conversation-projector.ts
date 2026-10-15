@@ -7,6 +7,8 @@ import { z } from "zod";
 import type { ThreadItem } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadItem.js";
 import type { Turn } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/Turn.js";
 import type { UserInput } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/UserInput.js";
+import { readTurnReceipts } from "./turn-receipt.js";
+import type { UserReceipt } from "./turn-receipt.js";
 
 const jsonValueSchema = z.json();
 type PiMessage = SessionMessageEntry["message"];
@@ -188,7 +190,8 @@ const appendBashMessage = (
 const appendMessage = (
   state: MutableTurnState,
   entry: SessionMessageEntry,
-  cwd: string
+  cwd: string,
+  receipt?: UserReceipt
 ): void => {
   const { message } = entry;
   if (message.role === "system") {
@@ -197,9 +200,9 @@ const appendMessage = (
   switch (message.role) {
     case "user": {
       state.turn.items.push({
-        clientId: null,
+        clientId: receipt?.clientId ?? null,
         content: [...userContent(message)],
-        id: entry.id,
+        id: receipt?.itemId ?? entry.id,
         type: "userMessage",
       });
       return;
@@ -259,20 +262,23 @@ const completeTurnTiming = (
     : null;
 };
 
+const isSystemEntry = (entry: SessionEntry): boolean => {
+  // Historical JSONL can contain roles absent from the current Pi types.
+  const role: string | undefined =
+    entry.type === "message" ? entry.message.role : undefined;
+  return role === "system";
+};
+
 export const projectPiConversation = (
   entries: readonly SessionEntry[],
   cwd: string
 ): readonly Turn[] => {
   const turns: Turn[] = [];
+  const receipts = readTurnReceipts(entries);
   let state: MutableTurnState | undefined;
   for (const entry of entries) {
-    if (entry.type === "message") {
-      // Historical sessions can contain system messages absent from Pi's types.
-      // Ignore them before creating a turn or updating its timing.
-      const role: string = entry.message.role;
-      if (role === "system") {
-        continue;
-      }
+    if (isSystemEntry(entry)) {
+      continue;
     }
     const renderableEntry =
       entry.type === "message" ||
@@ -283,16 +289,21 @@ export const projectPiConversation = (
     }
     const startsTurn =
       entry.type === "message" && entry.message.role === "user";
-    if (startsTurn && state) {
+    const receipt = receipts.get(entry.id);
+    if (startsTurn && state && state.turn.id !== receipt?.turnId) {
       if (state.turn.items.length > 0) {
         turns.push(state.turn);
       }
       state = undefined;
     }
     state ??= createTurn(entry);
+    if (startsTurn && receipt) {
+      state.turn.id = receipt.turnId;
+      state.turn.rootTurnId = receipt.rootTurnId;
+    }
 
     if (entry.type === "message") {
-      appendMessage(state, entry, cwd);
+      appendMessage(state, entry, cwd, receipt);
     } else if (entry.type === "compaction") {
       state.turn.items.push({ id: entry.id, type: "contextCompaction" });
       state.turn.status = "completed";

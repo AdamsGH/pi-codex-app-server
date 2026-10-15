@@ -55,6 +55,8 @@ Stop builds and other protocol-update processes before replacing generated contr
 
 Core regression tests cover history projection, owner leases, relay sequence recovery, and protocol validation. Native host-tools tests exercise fragmented frames, deadlines, cancellation, failed results, and endpoint selection.
 
+See [desktop queue diagnostics](desktop-queue-diagnostics.md) for a read-only snapshot of client-side ownership and pending turn identities. [Release acceptance](release-acceptance.md) records manual results and unresolved defects.
+
 For sidebar acceptance, build and enable the adapter, then run from a desktop task:
 
 ```sh
