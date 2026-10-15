@@ -34,3 +34,11 @@ The fixture starts with two owners and queues each owner's snapshot before deliv
 This reproduces an ownership failure under a constructed dual-owner state. It does not prove how that state arose in a running desktop or that the observed stalled queue has the same cause. The live logs show competing owner IDs, but DevTools were unavailable to inspect both current roles.
 
 The script accepts only the reviewed `src-DCNiwad_.js` digest. After an application update, review the declarations and their dependencies again before changing the guard. No desktop source or extracted bundle is included in this repository.
+
+## Live catalog updates
+
+The installed desktop handles `thread/started` by updating its thread cache and broadcasting a complete ownership snapshot. Publication previously repeated that notification whenever a session's modification time changed, including during live turns.
+
+For a thread already announced on a connection and loaded by Pi, activity-only catalog changes now avoid `thread/started`. Live turn events update the connected conversation; title changes use `thread/name/updated`. Fresh connections still receive the current full announcement. Unloaded history and structural changes retain full catalog updates. `thread/list` continues to return current timestamps and previews.
+
+Regression tests cover idle and active live threads, unloaded history, fresh connections, title updates, and catalog timestamps. Removing redundant announcements reduces a demonstrated source of ownership snapshots. It does not repair an existing desktop ownership cycle or prove that the live queue stall is resolved.

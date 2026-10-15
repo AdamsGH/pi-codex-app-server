@@ -8,6 +8,7 @@ import type { InitializeParams } from "../../vendor/openai-codex-app-server-prot
 import type { InitializeResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/InitializeResponse.js";
 import type { GetAccountResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/GetAccountResponse.js";
 import type { ModelProviderCapabilitiesReadResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ModelProviderCapabilitiesReadResponse.js";
+import type { Thread } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/Thread.js";
 import type { ThreadResumeParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadResumeParams.js";
 import type { ThreadStartParams } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadStartParams.js";
 import type { ThreadStartResponse } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadStartResponse.js";
@@ -50,6 +51,17 @@ const platformOs = (): string => {
   return current;
 };
 
+const publicationDetails = (thread: Thread): string => {
+  const {
+    name: _name,
+    preview: _preview,
+    recencyAt: _recencyAt,
+    updatedAt: _updatedAt,
+    ...details
+  } = thread;
+  return JSON.stringify(details);
+};
+
 export class AppServer {
   readonly #config: AppServerConfig;
   readonly #database: MetadataDatabase;
@@ -60,7 +72,7 @@ export class AppServer {
   readonly #threadCatalog: PiThreadCatalog;
   readonly #publicationClients = new Map<
     JsonRpcConnection,
-    Map<string, string>
+    Map<string, Thread | null>
   >();
   readonly #newThreads = new Map<string, ThreadStartResponse>();
   #publicationTimer?: ReturnType<typeof setInterval>;
@@ -606,7 +618,7 @@ export class AppServer {
     this.#publicationClients.set(
       connection,
       new Map(
-        this.#database.listThreads().map(({ threadId }) => [threadId, ""])
+        this.#database.listThreads().map(({ threadId }) => [threadId, null])
       )
     );
     signal.addEventListener(
@@ -633,6 +645,36 @@ export class AppServer {
       }
     }, 5000);
     this.#publicationTimer.unref();
+  }
+
+  #publishDescription(
+    connection: JsonRpcConnection,
+    before: Thread | null | undefined,
+    thread: Thread
+  ): void {
+    if (JSON.stringify(before) === JSON.stringify(thread)) {
+      return;
+    }
+    const runtime = this.#liveSessionManager.withRuntimeStatus(thread);
+    if (
+      before &&
+      runtime.status.type !== "notLoaded" &&
+      publicationDetails(before) === publicationDetails(thread)
+    ) {
+      // Live turn events already update recency. A repeated started event
+      // makes Desktop broadcast competing ownership snapshots.
+      if (before.name !== thread.name && thread.name) {
+        connection.notify("thread/name/updated", {
+          threadId: thread.id,
+          threadName: thread.name,
+        });
+      }
+      return;
+    }
+    connection.notify("thread/started", { thread: runtime });
+    if (this.#database.getThread(thread.id)?.archived) {
+      connection.notify("thread/archived", { threadId: thread.id });
+    }
   }
 
   async #refreshPublication(): Promise<void> {
@@ -669,7 +711,7 @@ export class AppServer {
           this.#threadCatalog.describe(session)
         );
         const revisions = new Map(
-          descriptions.map((thread) => [thread.id, JSON.stringify(thread)])
+          descriptions.map((thread) => [thread.id, thread])
         );
         for (const [connection, previous] of this.#publicationClients) {
           for (const threadId of previous.keys()) {
@@ -678,14 +720,11 @@ export class AppServer {
             }
           }
           for (const thread of descriptions) {
-            if (previous.get(thread.id) !== revisions.get(thread.id)) {
-              connection.notify("thread/started", {
-                thread: this.#liveSessionManager.withRuntimeStatus(thread),
-              });
-              if (this.#database.getThread(thread.id)?.archived) {
-                connection.notify("thread/archived", { threadId: thread.id });
-              }
-            }
+            this.#publishDescription(
+              connection,
+              previous.get(thread.id),
+              thread
+            );
           }
           this.#publicationClients.set(connection, revisions);
           // eslint-disable-next-line no-await-in-loop -- Publish each client catalog before attaching its runtime observers.
