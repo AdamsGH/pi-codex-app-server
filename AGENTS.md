@@ -12,4 +12,5 @@ Repository skills require an explicit user request, a declared source, and an up
 - Run `bun run fix` before committing and `bun run verify` before release. See [development.md](docs/development.md).
 - Do not edit generated contracts by hand. Use `bun run protocol:sync`, review the diff, and run the checks.
 - Create a new reviewed migration after changing `src/storage/schema.ts`. Preserve migrations already shipped to users.
+- Store investigation and acceptance reports under `docs/reports/`, not in the repository root.
 - Preserve upstream history and license notices. Do not add AI author or co-author attribution to commits or releases.

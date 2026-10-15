@@ -8,7 +8,7 @@ An isolated regression reproduced a separate recovery defect: rebuilding history
 
 After the receipt update was loaded, a second message stalled again while the preceding completed request remained `sending` in the desktop queue. The server was idle and retained the matching client message ID in its persisted receipt. Identity preservation therefore does not resolve the desktop queue stall. Desktop logs showed a successful `turn/start` response followed by repeated owner changes between two clients. The connection between these ownership transitions and the stalled submission still needs verification.
 
-Keep publication pending until the queue issue is resolved or its remaining uncertainty is explicitly accepted. The [queue probe](desktop-queue-diagnostics.md) is unavailable in the production desktop because DevTools are disabled; use existing logs and read-only server metadata. Do not resend an uncertain command automatically.
+Keep publication pending until the queue issue is resolved or its remaining uncertainty is explicitly accepted. The [queue probe](../desktop-queue-diagnostics.md) is unavailable in the production desktop because DevTools are disabled; use existing logs and read-only server metadata. Do not resend an uncertain command automatically.
 
 Publication now avoids repeated `thread/started` announcements for activity-only changes to already announced, loaded threads. The installed desktop turns those announcements into full ownership snapshots. Regression tests fail on the prior implementation for both idle and active threads and pass with title notifications and current catalog timestamps preserved. Live acceptance is still pending; this change does not clear an existing stalled desktop queue.
 
