@@ -42,3 +42,11 @@ The installed desktop handles `thread/started` by updating its thread cache and 
 For a thread already announced on a connection and loaded by Pi, activity-only catalog changes now avoid `thread/started`. Live turn events update the connected conversation; title changes use `thread/name/updated`. Fresh connections still receive the current full announcement. Unloaded history and structural changes retain full catalog updates. `thread/list` continues to return current timestamps and previews.
 
 Regression tests cover idle and active live threads, unloaded history, fresh connections, title updates, and catalog timestamps. Removing redundant announcements reduces a demonstrated source of ownership snapshots. It does not repair an existing desktop ownership cycle or prove that the live queue stall is resolved.
+
+## Replayed submissions
+
+Live inspection subsequently found the same client message ID in two completed turns. Desktop retained an executed submission as pending and submitted it again with later input. A saved queue snapshot can differ from an open window's in-memory queue. An empty saved snapshot does not establish that all windows have cleared their queues.
+
+Both the daemon and TUI owner now reconcile `clientUserMessageId` against the selected branch's validated receipts and live accepted input before starting or steering a run. A recognized ID returns its accepted turn without invoking Pi again or broadcasting another execution. Client message IDs identify immutable submissions within a thread. Reusing an accepted ID does not submit new input. Requests without an ID retain their existing behavior.
+
+Receipts cannot reconstruct IDs missing from older history. Queued steering input that Pi has not persisted is recognized only while its live acceptance remains available. This is duplicate suppression for known accepted submissions, not a guarantee of exactly-once execution after every crash or persistence failure. Never infer acceptance by comparing message text or automatically replay an uncertain command.

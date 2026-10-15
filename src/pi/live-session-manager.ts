@@ -29,6 +29,7 @@ import {
   parseCodexWireMessage,
   parseServerNotification,
 } from "../protocol/validation.js";
+import { findAcceptedTurn } from "./accepted-turn.js";
 import { projectPiConversation } from "./conversation-projector.js";
 import {
   emptyTurn,
@@ -524,6 +525,13 @@ export class PiLiveSessionManager {
   ): Promise<Turn> {
     this.rebindConnection(params.threadId, connection);
     const owner = await this.attachOwner(params.threadId);
+    const accepted = await this.#acceptedTurn(
+      params.threadId,
+      params.clientUserMessageId
+    );
+    if (accepted) {
+      return accepted;
+    }
     if (owner) {
       const result = await owner.request({
         id: randomUUID(),
@@ -904,9 +912,20 @@ export class PiLiveSessionManager {
 
   async steer(params: TurnSteerParams): Promise<TurnSteerResponse> {
     const owner = await this.attachOwner(params.threadId);
+    const accepted = await this.#acceptedTurn(
+      params.threadId,
+      params.clientUserMessageId
+    );
+    if (accepted) {
+      return { turnId: accepted.id };
+    }
     if (owner) {
-      await owner.request({ id: randomUUID(), method: "turn/steer", params });
-      return { turnId: params.expectedTurnId };
+      const result = await owner.request({
+        id: randomUUID(),
+        method: "turn/steer",
+        params,
+      });
+      return z.object({ turnId: z.string() }).parse(result);
     }
     const loaded = this.#loaded.get(params.threadId);
     const active = loaded?.active;
@@ -926,6 +945,30 @@ export class PiLiveSessionManager {
     );
     notifyItemCompleted(active, userItem);
     return { turnId: active.turn.id };
+  }
+
+  async #acceptedTurn(
+    threadId: string,
+    clientId: string | null | undefined
+  ): Promise<Turn | undefined> {
+    if (!clientId) {
+      return undefined;
+    }
+    const loaded = this.#loaded.get(threadId);
+    const manager =
+      loaded?.session.sessionManager ??
+      (await this.#sessionRepository.load(threadId));
+    return manager
+      ? findAcceptedTurn({
+          clientId,
+          cwd: manager.getCwd(),
+          entries: manager.getBranch(),
+          live:
+            loaded?.active?.turn ??
+            this.#owners.get(threadId)?.snapshot.turn ??
+            undefined,
+        })
+      : undefined;
   }
 
   async #runPrompt(

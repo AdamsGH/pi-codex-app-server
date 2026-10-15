@@ -144,7 +144,7 @@ const fixture = async (persistent = false) => {
       return Promise.resolve();
     });
   }
-  return { clients, context, events, home, session, streams };
+  return { bridge, clients, context, events, home, session, streams };
 };
 const streamText = (
   stream: AssistantMessageEventStream,
@@ -308,6 +308,16 @@ describe("TUI session bridge", () => {
           threadId: f.session.sessionId,
         },
       });
+      const duplicate = await f.clients[1]?.request({
+        id: 2,
+        method: "turn/start",
+        params: {
+          clientUserMessageId: "accepted-client",
+          input: [{ text: "synthetic input", text_elements: [], type: "text" }],
+          threadId: f.session.sessionId,
+        },
+      });
+      expect(duplicate).toMatchObject({ id: f.clients[0]?.snapshot.turn?.id });
       await vi.waitFor(() => expect(f.streams).toHaveLength(1));
       const [stream] = f.streams;
       if (!stream) {
@@ -349,6 +359,26 @@ describe("TUI session bridge", () => {
       ).toStrictEqual(
         live?.items.filter((item) => item.type === "userMessage")
       );
+      f.bridge?.refresh();
+      const eventCount = f.events[0]?.length;
+      const replay = await f.clients[0]?.request({
+        id: 3,
+        method: "turn/start",
+        params: {
+          clientUserMessageId: "accepted-client",
+          input: [{ text: "synthetic input", text_elements: [], type: "text" }],
+          threadId: f.session.sessionId,
+        },
+      });
+      expect({
+        events: f.events[0]?.length,
+        executions: f.streams.length,
+        replay,
+      }).toMatchObject({
+        events: eventCount,
+        executions: 1,
+        replay: { id: live?.id, status: live?.status },
+      });
     }
   );
 
@@ -426,6 +456,17 @@ describe("TUI session bridge", () => {
       id: 3,
       method: "turn/steer",
       params: {
+        clientUserMessageId: "steer-once",
+        expectedTurnId: turn.id,
+        input: [{ text: "steered", text_elements: [], type: "text" }],
+        threadId: f.session.sessionId,
+      },
+    });
+    await f.clients[0]?.request({
+      id: 30,
+      method: "turn/steer",
+      params: {
+        clientUserMessageId: "steer-once",
         expectedTurnId: turn.id,
         input: [{ text: "steered", text_elements: [], type: "text" }],
         threadId: f.session.sessionId,

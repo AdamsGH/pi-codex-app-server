@@ -9,6 +9,7 @@ import type {
 import { z } from "zod";
 
 import type { ThreadItem } from "../../vendor/openai-codex-app-server-protocol/typescript/v2/ThreadItem.js";
+import { findAcceptedTurn } from "../pi/accepted-turn.js";
 import { projectPiConversation } from "../pi/conversation-projector.js";
 import { images, textPrompt } from "../pi/live-session-manager.js";
 import {
@@ -254,6 +255,21 @@ export class TuiSessionBridge {
       }
       context.compact();
       return {};
+    }
+    const clientId = request.params.clientUserMessageId;
+    const accepted =
+      clientId && this.#active && this.#clientMessageId === clientId
+        ? structuredClone(this.#active.turn)
+        : findAcceptedTurn({
+            clientId,
+            cwd: context.cwd,
+            entries: context.sessionManager.getBranch(),
+            live: (this.#active ?? this.#last)?.turn,
+          });
+    if (accepted) {
+      return request.method === "turn/steer"
+        ? { turnId: accepted.id }
+        : accepted;
     }
     if (request.method === "turn/steer") {
       return await this.#steer(request, context);

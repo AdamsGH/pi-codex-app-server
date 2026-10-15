@@ -598,6 +598,18 @@ describe("Pi live turn lifecycle", () => {
       },
       f.connection
     );
+    const duplicate = await f.manager.startTurn(
+      {
+        clientUserMessageId: "sdk-client",
+        input: [{ text: "synthetic input", text_elements: [], type: "text" }],
+        threadId: "thread",
+      },
+      f.connection
+    );
+    expect({
+      executions: f.prompt.mock.calls.length,
+      id: duplicate.id,
+    }).toStrictEqual({ executions: 1, id: turn.id });
     f.completion.resolve();
     await vi.waitFor(() =>
       expect(f.notifications.at(-1)).toMatchObject({
@@ -618,6 +630,34 @@ describe("Pi live turn lifecycle", () => {
         ]),
       },
     ]);
+    vi.spyOn(f.session, "dispose").mockImplementation(() => {});
+    f.manager.unload("thread");
+    const count = f.notifications.length;
+    const replay = await f.manager.startTurn(
+      {
+        clientUserMessageId: "sdk-client",
+        input: [{ text: "synthetic input", text_elements: [], type: "text" }],
+        threadId: "thread",
+      },
+      f.connection
+    );
+    await expect(
+      f.manager.steer({
+        clientUserMessageId: "sdk-client",
+        expectedTurnId: turn.id,
+        input: [{ text: "synthetic input", text_elements: [], type: "text" }],
+        threadId: "thread",
+      })
+    ).resolves.toStrictEqual({ turnId: turn.id });
+    expect({
+      events: f.notifications.length,
+      executions: f.prompt.mock.calls.length,
+      replay,
+    }).toMatchObject({
+      events: count,
+      executions: 1,
+      replay: { id: turn.id, status: "completed" },
+    });
   });
 
   it("reports prompt rejection as failed with its error", async () => {
