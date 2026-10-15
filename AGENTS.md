@@ -14,3 +14,12 @@ Repository skills require an explicit user request, a declared source, and an up
 - Create a new reviewed migration after changing `src/storage/schema.ts`. Preserve migrations already shipped to users.
 - Store investigation and acceptance reports under `docs/reports/`, not in the repository root.
 - Preserve upstream history and license notices. Do not add AI author or co-author attribution to commits or releases.
+
+## Versioning and publication
+
+- Follow [Semantic Versioning](https://semver.org/) with `MAJOR.MINOR.PATCH`. Choose the highest required bump across all changes since this fork package's last published version, not upstream tags.
+- At `1.0.0` and later, increment PATCH for backward-compatible fixes, MINOR for backward-compatible functionality or deprecations, and MAJOR for incompatible public contract changes. Reset lower components to zero when incrementing MINOR or MAJOR.
+- Before `1.0.0`, use this repository convention: compatible fixes increment PATCH (`0.2.0` to `0.2.1`); new functionality or incompatible changes increment MINOR (`0.2.1` to `0.3.0`). Document incompatible changes and migration steps. Declare `1.0.0` deliberately when the public contract is stable. SemVer itself does not guarantee compatibility for `0.y.z`.
+- Treat exported APIs, CLI commands and options, configuration and defaults, protocol behavior, persisted data compatibility, and required runtime versions as public contracts when assessing a bump.
+- Keep `package.json`, the changelog, `v<version>` tag, and release manifest consistent. Released versions and their contents are immutable. Corrections require a new version; never move a published tag or replace a published package.
+- Publish the exact archive from a successful release preparation run at its recorded commit. Attach that same archive and its manifest and checksums to the GitHub Release. Follow [the release procedure](docs/development.md#prepare-a-release), including explicit publication authorization and registry verification before retrying an uncertain publish.

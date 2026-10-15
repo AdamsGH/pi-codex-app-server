@@ -1,12 +1,14 @@
 # Changelog
 
-## 0.2.0 (fork, unreleased)
+## 0.2.0 (2026-10-15)
 
 - Publish the fork identity as `@pi-switch/pi-codex-app-server`, retaining the `pi-codex-app-server` command.
 - Share native Pi TUI sessions with Codex through a single-writer owner bridge.
 - Recover desktop history, runtime status, and relay sequence state across reconnects.
 - Deliver turn completion before idle status so clients can release their streams safely.
 - Preserve completed-turn and client message identities in Pi history across owner and daemon reconnects.
+- Suppress duplicate execution of accepted client message identities and redundant desktop thread announcements.
+- Discover native desktop host tools by capability when saved endpoints become stale.
 - Show Codex model names without the redundant provider prefix.
 - Synchronize newly published chats through native desktop host tools.
 - Add session publication controls and protocol generation with verified artifact digests.
