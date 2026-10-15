@@ -33,6 +33,10 @@ daemon: build
 desktop-queue-probe host thread:
     node scripts/desktop-queue-probe.mjs "{{host}}" "{{thread}}"
 
+# Exercise installed desktop ownership code with synthetic state.
+desktop-ownership-check asar:
+    node scripts/check-desktop-ownership.mjs --asar "{{asar}}"
+
 # Export publication metadata without changing desktop state.
 sidebar-export: build
     node dist/sidebar-sync.js export --output "{{snapshot}}" --skip-empty-projects --overwrite

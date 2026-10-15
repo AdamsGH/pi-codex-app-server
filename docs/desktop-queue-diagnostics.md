@@ -8,7 +8,9 @@ Generate the console expression from the repository:
 just desktop-queue-probe <host-id> <thread-id>
 ```
 
-On Windows, append `| Set-Clipboard`. Open DevTools in the affected desktop window with Ctrl+Shift+I, select Console, paste the generated expression, and run it. Inspect the resulting JSON before sharing it. The `threadId` must belong to the selected host.
+On Windows, append `| Set-Clipboard`. If DevTools are available in the affected desktop window, select Console, paste the generated expression, and run it. Inspect the resulting JSON before sharing it. The `threadId` must belong to the selected host.
+
+The production desktop used in acceptance does not expose DevTools through Ctrl+Shift+I or its View menu. Its window configuration gates DevTools behind `allowDevtools`. The probe has passed synthetic serialization and redaction tests but has not been validated in a live desktop window. It cannot currently collect a snapshot from that production installation. Do not restart the application or patch its binaries to enable it during a stalled submission; doing so loses the state being investigated. Use existing desktop logs and read-only server metadata instead.
 
 The implementation was derived from the installed Codex desktop 26.1007.9446.0 source, specifically `app-shared-30671c57ec82.js` and `app-initial-102e45562729.js`. It uses the `v$t` manager registry atom and its `forHost`, `getConversation`, and `getStreamRole` read interfaces. React fibers are used only to locate the existing store.
 
@@ -17,3 +19,18 @@ The probe refuses other bundle hashes. After a desktop update, inspect the insta
 Completed turns now store `codex-app-server.turn-receipt.v1` custom entries through the Pi session's existing writer. These records contain only turn IDs and associations between persisted user entries, live item IDs, and client message IDs. They do not enter model context. Projection uses only validated associations present on the selected branch. A queued steer that Pi has not persisted is not acknowledged by the receipt. Older history without a receipt retains its previous projection; IDs cannot be reconstructed safely by guessing.
 
 Debug logs record receipt persistence with thread and turn IDs and user counts. Receipt write failures produce a warning and do not suppress the actual execution outcome. No request is replayed as part of this recovery. Active processes must load the updated daemon and extension before they can write and restore these receipts.
+
+## Isolated ownership reproduction
+
+This command reads the installed archive, validates the reviewed module's SHA-256, extracts its ownership class and normalization helpers, and runs them in a separate VM context with synthetic state. It does not contact the running application, use real chats, or write the archive. TypeScript must be installed from the repository lockfile.
+
+```powershell
+$desktopArchive = Join-Path (Get-AppxPackage -Name OpenAI.Codex).InstallLocation 'app/resources/app.asar'
+just desktop-ownership-check $desktopArchive
+```
+
+The fixture starts with two owners and queues each owner's snapshot before delivering either one. In desktop 26.1007.9446.0, both recipients accept the competing snapshot and become followers of each other. The result has `owners: 0`. A follower's queue execution path returns without starting work.
+
+This reproduces an ownership failure under a constructed dual-owner state. It does not prove how that state arose in a running desktop or that the observed stalled queue has the same cause. The live logs show competing owner IDs, but DevTools were unavailable to inspect both current roles.
+
+The script accepts only the reviewed `src-DCNiwad_.js` digest. After an application update, review the declarations and their dependencies again before changing the guard. No desktop source or extracted bundle is included in this repository.
