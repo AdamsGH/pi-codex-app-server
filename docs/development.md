@@ -33,13 +33,13 @@ PR CI runs on Windows and Linux with Node 24 and 26. It does not claim visual de
 
 ## Database migrations
 
-Change `src/storage/schema.ts`, then run `bun run db:generate`. Review both the SQL and generated schema snapshot. Keep prior migration directories intact. Random generated migration labels are harmless; they identify a versioned migration, not an installed database.
+After changing `src/storage/schema.ts`, run `bun run db:generate` and review the new SQL and schema snapshot. Preserve shipped migrations. Random generated migration labels identify a versioned migration, not an installed database.
 
 Exercise fresh database initialization and an upgrade from the previous schema. Back up a real database before applying a migration that changes or removes persisted data. Migrations are shipped in the npm package and run when `MetadataDatabase` opens.
 
 ## Protocol update
 
-Use an explicitly selected Codex CLI version:
+Regenerate contracts rather than editing generated files. Keep runtime validation aligned with the vendored snapshot. Use an explicitly selected Codex CLI version:
 
 ```sh
 CODEX_PROTOCOL_CLI=/path/to/codex bun run protocol:sync
@@ -67,11 +67,24 @@ The script checks daemon and desktop availability before creating a synthetic Pi
 
 ## Prepare a release
 
-The fork package is `@pi-switch/pi-codex-app-server`; its CLI name remains `pi-codex-app-server`. Update version and changelog, verify the GitHub source URL, run `bun run verify`, and inspect the resulting package inventory. Generated contracts, migrations, documentation, and notices must be present. Runtime databases, auth files, fixtures, and local caches must be absent.
+Choose the highest required version bump across all changes since this fork package's last published version, not upstream tags. Before `1.0.0`, compatible fixes increment PATCH; functionality or incompatible changes increment MINOR. At `1.0.0` and later, use SemVer PATCH for compatible fixes, MINOR for compatible functionality or deprecations, and MAJOR for incompatible changes. Reset lower components on a MINOR or MAJOR bump. Assess exported APIs, CLI, configuration and defaults, protocol behavior, persisted data, and runtime requirements. Document incompatible changes and migration steps; declare `1.0.0` deliberately when the public contract is stable.
 
-No push, tag, PR, or release preparation triggers npm publishing. Run the manual **Prepare release** workflow on `main`. It verifies the exact commit on Windows and Linux with Node 24 and 26, packs one candidate, and checks installation of that same archive on all four targets. The workflow only has read access to repository contents. It does not create tags or releases and has no publishing credentials.
+Released versions, tags, and package contents are immutable. Corrections require a new version. Publication requires explicit authorization and uses the exact successful CI archive, never a local repack.
 
-The `release-candidate` artifact contains the `.tgz`, `release.json` with source commit, version and SHA-256, and `SHA256SUMS`. Download it only from a successful preparation run. Check that its source commit and digest match before creating `v<version>` and a draft GitHub Release with the same files. Tag the recorded commit, not the current moving branch head. Record Desktop acceptance in the release notes; iOS hardware testing is optional under [ADR 0004](adr/0004-require-chatgpt-mobile-remote.md).
+1. Update `package.json` and the changelog. Run `bun run verify`, review the diff, commit, and push to `main`.
+2. Run the manual **Prepare release** workflow on that commit. Wait for success, including exact-archive installation on Windows and Linux with Node 24 and 26. CI has no publishing credentials.
+3. Review `docs/reports/releases/<version>/RELEASE.md`. State the observed failure, changed behavior, actual verification, and limitations. Record relevant Desktop acceptance without claiming untested behavior; iOS hardware testing is optional under [ADR 0004](adr/0004-require-chatgpt-mobile-remote.md).
+4. With publication authorized and personal `gh` and npm authentication active, run `just release-publish <run-id>` in the clean checkout of the CI commit. Complete npm's browser confirmation when prompted. The command is done only when registry integrity, clean installation, GitHub author and body, tag, latest status, and all asset digests are verified.
+
+The publisher downloads the `release-candidate` into `docs/reports/releases/<version>/ci/`, verifies it against the checkout, creates or reconciles the GitHub draft, and submits its archive to npm. It then waits for registry visibility, verifies publisher `adamsgh`, latest status and archive bytes, installs that registry archive in isolated storage, and publishes the GitHub Release with author `AdamsGH`. Release notes, the registry download, npm attempt receipt, and final `publication.json` stay under the same ignored version directory. Git and npm exclude all of `docs/reports/`.
+
+### Resume an interrupted publication
+
+Rerun the same `just release-publish <run-id>` with the same local release records. Existing tags, releases, and assets must match the candidate; published content is preserved. Run one publisher at a time across machines. A local lock prevents concurrent publishers in the same checkout.
+
+The publisher writes `npm-attempt.json` before invoking npm. Once that receipt exists, a rerun only reconciles registry state; it does not resubmit the package. npm can return `202 Accepted` and exit successfully before metadata or tarballs become available. Checks tolerate transient registry failures and wait up to 30 minutes. A timeout leaves the GitHub draft and receipt intact. Keep the receipt while the result is uncertain: a registry `404` alone does not prove the upload failed. Resolve a definitively rejected upload with npm before retiring its receipt and authorizing another attempt.
+
+### Local packaging diagnostics
 
 For local preparation, run `just release-prepare` from a clean checkout. Output is `out/release/`. Repeating preparation verifies an existing matching candidate instead of replacing it. A candidate from another commit or with a changed checksum fails. CI artifacts are the release source; local output is for diagnostics.
 
@@ -79,6 +92,4 @@ For local preparation, run `just release-prepare` from a clean checkout. Output 
 bun run package:check --candidate /absolute/path/to/candidate/release.json
 ```
 
-After explicit npm publication approval, publish the downloaded `.tgz` with public scope access. Publishing a tarball does not run the repository's `prepublishOnly` hook, so the explicit artifact checks above are required. Verify registry owner, version, integrity and a fresh Pi installation before making the GitHub Release public. If publication reports an uncertain outcome, inspect the registry before retrying. npm organization access and GitHub access are independent.
-
-The first scoped fork release is prepared as 0.2.0. Earlier changelog entries are upstream history. Preserve attribution and license notices when maintaining the fork.
+Publishing a tarball bypasses `prepublishOnly`; the publisher explicitly runs package checks before submission and after downloading from npm. npm organization access and GitHub access are independent.

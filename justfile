@@ -19,6 +19,10 @@ release-prepare:
     bun run verify
     bun run release:prepare
 
+# Publish a successful CI candidate and reconcile interrupted attempts.
+release-publish run:
+    bun run scripts/publish-release.ts "{{run}}"
+
 # Run formatting checks, type checks, and tests.
 check:
     bun run check

@@ -173,10 +173,12 @@ try {
     throw new Error("Package has no database migrations");
   }
   if (
-    packed.files.some((file) =>
-      /(?:^|\/)(?:\.env|auth\.json|state\.sqlite|node_modules|\.cache|\.agents)(?:$|[./])/u.test(
-        file.path
-      )
+    packed.files.some(
+      (file) =>
+        file.path.startsWith("docs/reports/") ||
+        /(?:^|\/)(?:\.env|auth\.json|state\.sqlite|node_modules|\.cache|\.agents)(?:$|[./])/u.test(
+          file.path
+        )
     )
   ) {
     throw new Error("Package contains local runtime state or dependencies");

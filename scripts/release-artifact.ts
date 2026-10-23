@@ -24,6 +24,41 @@ export const releaseArtifactSchema = z
 export const releaseDigest = (content: Uint8Array): string =>
   createHash("sha256").update(content).digest("hex");
 
+export const githubReleaseSchema = z.object({
+  assets: z.array(
+    z.object({
+      digest: z.string().nullable(),
+      name: z.string(),
+      uploader: z.object({ login: z.string() }),
+    })
+  ),
+  author: z.object({ login: z.string() }),
+  body: z.string(),
+  draft: z.boolean(),
+  html_url: z.url(),
+  id: z.number().int().positive(),
+  performed_via_github_app: z.object({ id: z.number() }).nullish(),
+  tag_name: z.string(),
+});
+
+export const verifyGithubReleaseIdentity = (
+  release: z.infer<typeof githubReleaseSchema>,
+  artifact: z.infer<typeof releaseArtifactSchema>,
+  notes: string
+): void => {
+  if (
+    release.author.login !== "AdamsGH" ||
+    release.performed_via_github_app ||
+    release.tag_name !== artifact.tag ||
+    release.body.replaceAll("\r\n", "\n").trim() !==
+      notes.replaceAll("\r\n", "\n").trim()
+  ) {
+    throw new Error(
+      "GitHub release author, app attribution, tag, or body differs from the reviewed release"
+    );
+  }
+};
+
 export const releaseGit = (root: string, args: string[]): string =>
   execFileSync("git", args, {
     cwd: root,
