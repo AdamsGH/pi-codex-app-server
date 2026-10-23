@@ -62,9 +62,7 @@ interface ExperienceOptions {
 }
 
 const footerText = (status: DaemonStatus): string =>
-  status.state === "running"
-    ? `Codex server: running · ${status.endpoint.url}`
-    : "Codex server: stopped";
+  status.state === "running" ? "codex: connected" : "codex: disconnected";
 
 const quoteShellArgument = (value: string): string =>
   process.platform === "win32"
@@ -188,7 +186,10 @@ export const createCodexServerExperience = (options: ExperienceOptions) => {
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Unknown startup error";
-        context.setStatus(STATUS_KEY, "Codex server: startup failed");
+        context.setStatus(
+          STATUS_KEY,
+          "codex: disconnected (server unavailable)"
+        );
         context.notify(
           `Codex App Server did not start automatically: ${message}`,
           "warning"

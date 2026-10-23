@@ -29,6 +29,8 @@ The native desktop adapter uses a private, version-sensitive host-tools interfac
 ## Capabilities and limits
 
 - Codex CLI and desktop attach to a native Pi TUI session. Input, replies, reasoning, and tool events share one writer and one history.
+- The footer shows `codex: connected` when the session bridge is attached and the daemon is running. Connection details remain available through `/codex-server status`.
+- If a native Pi window cannot acquire the session lease, it stays usable without app-server attachment. The footer shows `codex: disconnected (session in use)` or `codex: disconnected (bridge unavailable)`. Run `/reload` to retry attachment. Disconnected windows use native Pi behavior; the app-server does not coordinate their history writes with the attached owner.
 - The daemon survives client disconnects and Pi extension reloads. Reconnecting clients recover history and active-turn items.
 - ChatGPT Remote Control uses Pi's OpenAI OAuth credentials.
 - Publication settings control exposed history. Repository roots become projects; unassigned sessions use the Pi section.

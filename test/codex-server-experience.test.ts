@@ -98,14 +98,11 @@ describe("Codex Server extension experience", () => {
     await experience.handleSessionStart(context);
 
     expect(control.start).toHaveBeenCalledOnce();
-    expect(setStatus).toHaveBeenCalledWith(
-      "codex-server",
-      "Codex server: running · ws://127.0.0.1:4242/"
-    );
+    expect(setStatus).toHaveBeenCalledWith("codex-server", "codex: connected");
   });
 
   it("shows detailed daemon status", async () => {
-    const { context, notify } = createContext();
+    const { context, notify, setStatus } = createContext();
     const experience = createCodexServerExperience({
       autoStart: true,
       control: createControl(),
@@ -116,6 +113,7 @@ describe("Codex Server extension experience", () => {
 
     await experience.handleCommand("status", context);
 
+    expect(setStatus).toHaveBeenCalledWith("codex-server", "codex: connected");
     expect(notify).toHaveBeenCalledWith(
       expect.stringContaining(
         "Codex App Server: running\nPID: 4242\nWebSocket: ws://127.0.0.1:4242/"
@@ -131,6 +129,44 @@ describe("Codex Server extension experience", () => {
         "codex --remote 'ws://127.0.0.1:4242/' resume 'pi-session-1'"
       ),
       "info"
+    );
+  });
+
+  it("shows a compact disconnected footer after stopping the daemon", async () => {
+    const { context, setStatus } = createContext();
+    const experience = createCodexServerExperience({
+      autoStart: false,
+      control: createControl(),
+      paths: { endpoint: "endpoint.json", logs: "logs" },
+      remoteControlEnabled: true,
+      renderQrCode: createQrRenderer(),
+    });
+
+    await experience.handleCommand("stop", context);
+
+    expect(setStatus).toHaveBeenCalledWith(
+      "codex-server",
+      "codex: disconnected"
+    );
+  });
+
+  it("shows a compact disconnected footer when daemon startup fails", async () => {
+    const { context, setStatus } = createContext();
+    const control = createControl();
+    vi.mocked(control.start).mockRejectedValue(new Error("Unavailable"));
+    const experience = createCodexServerExperience({
+      autoStart: true,
+      control,
+      paths: { endpoint: "endpoint.json", logs: "logs" },
+      remoteControlEnabled: true,
+      renderQrCode: createQrRenderer(),
+    });
+
+    await experience.handleSessionStart(context);
+
+    expect(setStatus).toHaveBeenCalledWith(
+      "codex-server",
+      "codex: disconnected (server unavailable)"
     );
   });
 

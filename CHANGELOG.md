@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 (2026-10-23)
+
+- Fix the extension exiting native Pi when `pi -c` opens a session whose app-server lease is already held by another window.
+- Keep native Pi input available when app-server attachment fails, with a short disconnected status in the footer.
+- Replace the verbose daemon footer with `codex: connected` or `codex: disconnected`. Keep connection details in `/codex-server status` and prevent daemon commands from overwriting a failed session attachment status.
+
+The app-server lease remains exclusive. Disconnected windows use native Pi behavior; the app-server does not coordinate their history writes with the attached owner. No launcher or Pi runtime changes are required.
+
 ## 0.2.0 (2026-10-15)
 
 - Publish the fork identity as `@pi-switch/pi-codex-app-server`, retaining the `pi-codex-app-server` command.
