@@ -6,6 +6,7 @@ package-lock.json
 out
 dist
 *.tgz
+docs/reports/
 
 # code coverage
 coverage
