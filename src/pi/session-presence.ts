@@ -18,6 +18,7 @@ const presenceSchema = z.object({
 });
 const HEARTBEAT_MS = 10_000;
 const EXPIRES_MS = 30_000;
+const pendingReads = new Map<string, Promise<ReadonlySet<string>>>();
 
 const alive = (pid: number): boolean => {
   try {
@@ -28,9 +29,7 @@ const alive = (pid: number): boolean => {
   }
 };
 
-export const readPiPresence = async (
-  home: string
-): Promise<ReadonlySet<string>> => {
+const scanPiPresence = async (home: string): Promise<ReadonlySet<string>> => {
   const directory = path.join(home, "presence");
   let files: string[];
   try {
@@ -41,19 +40,24 @@ export const readPiPresence = async (
     }
     throw error;
   }
-  const records = await Promise.all(
-    files
-      .filter((file) => file.endsWith(".json"))
-      .map(async (file) => {
+  const records = new Set<string>();
+  const jsonFiles = files.filter((file) => file.endsWith(".json"));
+  for (let offset = 0; offset < jsonFiles.length; offset += 16) {
+    // eslint-disable-next-line no-await-in-loop -- Bound filesystem work when crashed sessions leave many records.
+    await Promise.all(
+      jsonFiles.slice(offset, offset + 16).map(async (file) => {
         try {
           const record = presenceSchema.parse(
             JSON.parse(await readFile(path.join(directory, file), "utf-8"))
           );
-          return record.touchedAt <= Date.now() + HEARTBEAT_MS &&
-            Date.now() - record.touchedAt <= EXPIRES_MS &&
-            alive(record.pid)
-            ? record.threadId
-            : undefined;
+          if (!alive(record.pid)) {
+            await rm(path.join(directory, file), { force: true });
+          } else if (
+            record.touchedAt <= Date.now() + HEARTBEAT_MS &&
+            Date.now() - record.touchedAt <= EXPIRES_MS
+          ) {
+            records.add(record.threadId);
+          }
         } catch (error) {
           if (
             error instanceof Error &&
@@ -64,8 +68,26 @@ export const readPiPresence = async (
           }
         }
       })
-  );
-  return new Set(records.filter((id): id is string => id !== undefined));
+    );
+  }
+  return records;
+};
+
+export const readPiPresence = (home: string): Promise<ReadonlySet<string>> => {
+  const key = path.resolve(home);
+  let pending = pendingReads.get(key);
+  if (!pending) {
+    // Share only in-flight scans; ownership checks must not reuse stale results.
+    pending = (async () => {
+      try {
+        return await scanPiPresence(key);
+      } finally {
+        pendingReads.delete(key);
+      }
+    })();
+    pendingReads.set(key, pending);
+  }
+  return pending;
 };
 
 export class PiSessionPresence {
