@@ -145,8 +145,7 @@ const execute = async (argv, options) => {
 };
 
 const which = Bun.which.bind(Bun);
-Bun.which = (command) =>
-  command === "gh" || command === "npm" ? command : which(command);
+Bun.which = (command) => (command === "gh" ? command : which(command));
 Bun.spawn = (argv, options) => {
   const result = execute(argv, options);
   return {
