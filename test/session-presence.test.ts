@@ -35,7 +35,8 @@ describe("Presence scan", () => {
       const pending = readPiPresence(home);
       expect(readPiPresence(path.join(home, "."))).toBe(pending);
       await expect(pending).resolves.toStrictEqual(new Set(["active"]));
-      await expect(readdir(directory)).resolves.toStrictEqual([
+      const remainingFiles = await readdir(directory);
+      expect(remainingFiles.toSorted()).toStrictEqual([
         "active.json",
         "expired.json",
         "malformed.json",

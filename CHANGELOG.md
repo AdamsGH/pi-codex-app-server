@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 (2026-11-11)
+
+- Remove presence records left by exited Pi processes so repeated ownership checks do not keep scanning abandoned sessions.
+- Limit presence file operations to batches of 16 and share concurrent scans for the same home directory without caching completed ownership results.
+- Preserve expired records belonging to live processes and leave session files, owner leases, and desktop state unchanged.
+
 ## 0.2.1 (2026-10-23)
 
 - Fix the extension exiting native Pi when `pi -c` opens a session whose app-server lease is already held by another window.
